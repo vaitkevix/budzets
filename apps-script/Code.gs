@@ -21,7 +21,7 @@ const USER_HEAD = ['Vārds', 'PIN', 'Loma', 'Aktīvs'];
 const BUD_HEAD = ['ID', 'Nosaukums', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Sagatavots', 'Derīgs līdz',
   'Autors', 'Statuss', 'Cena bez PVN', 'Cena ar PVN', 'Versija', 'Izveidots', 'Atjaunots',
   'Vadības komentārs', 'Izskatīja', 'Dati', 'Dzīvokļu m²'];
-const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena ar PVN', 'Piezīme', 'Dati'];
+const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena bez PVN', 'Piezīme', 'Dati'];
 const LOG_HEAD = ['Laiks', 'Lietotājs', 'Darbība', 'Budžets', 'Info'];
 const STATUSES = ['Melnraksts', 'Iesniegts', 'Apstiprināts', 'Noraidīts', 'Arhivēts'];
 const TZ = 'Europe/Riga';
@@ -57,7 +57,8 @@ const ACTIONS = {
   pdf: (u, r) => ({ file: exportPdf_(u, r.id, r.data, r.calc, r.meta) }),
   xlsx: (u, r) => ({ file: exportXlsx_(u, r.id, r.data, r.calc, r.meta) }),
   listXlsx: (u, r) => ({ file: exportListXlsx_(u, r.ids) }),
-  aiKadastrs: (u, r) => ({ ai: aiKadastrs_(u, r.text) })
+  aiKadastrs: (u, r) => ({ ai: aiKadastrs_(u, r.text) }),
+  aiTelpas: (u, r) => ({ kat: aiTelpas_(u, r.nosaukumi) })
 };
 
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
@@ -144,7 +145,7 @@ function rowToMeta_(r) {
     arPVN: Number(o['Cena ar PVN']) || 0, versija: Number(o['Versija']) || 1,
     izveidots: o['Izveidots'], atjaunots: o['Atjaunots'], komentars: o['Vadības komentārs'],
     izskatija: o['Izskatīja'], plat: Number(o['Dzīvokļu m²']) || 0,
-    perM2: (Number(o['Dzīvokļu m²']) > 0) ? round2_(Number(o['Cena ar PVN']) / Number(o['Dzīvokļu m²']) * 100) / 100 : null
+    perM2: (Number(o['Dzīvokļu m²']) > 0) ? round2_(Number(o['Cena bez PVN']) / Number(o['Dzīvokļu m²']) * 100) / 100 : null
   };
 }
 function findRow_(id) {
@@ -214,7 +215,7 @@ function saveBudget_(u, payload) {
       created, ts, koment, izsk, json, Number(o.lietderiga) || ''];
     if (row) sh.getRange(row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
-    sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.arPVN), payload.piezime || '', json]);
+    sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.bezPVN), payload.piezime || '', json]);
     log_(u.name, row ? 'Saglabāja' : 'Izveidoja', id, 'v' + version + ' · ' + status);
     return { id: id, versija: version, statuss: status };
   } finally {
@@ -238,7 +239,7 @@ function setStatus_(u, id, status, comment) {
     sh.getRange(f.idx, BUD_HEAD.indexOf('Vadības komentārs') + 1).setValue(comment || '');
     sh.getRange(f.idx, BUD_HEAD.indexOf('Izskatīja') + 1).setValue(u.name + ' · ' + now_().slice(0, 16).replace('T', ' '));
   }
-  sh_(SHEETS.VER).appendRow([id, meta.versija, now_(), u.name, status, meta.arPVN, comment || ('Statuss → ' + status), '']);
+  sh_(SHEETS.VER).appendRow([id, meta.versija, now_(), u.name, status, meta.bezPVN, comment || ('Statuss → ' + status), '']);
   log_(u.name, 'Statuss', id, status + (comment ? ' · ' + comment : ''));
   return true;
 }
@@ -261,7 +262,7 @@ function getVersions_(u, id) {
   const v = sh_(SHEETS.VER).getDataRange().getValues();
   v.shift();
   return v.filter(r => String(r[0]) === String(id)).map(r => ({
-    versija: r[1], laiks: String(r[2]), lietotajs: r[3], statuss: r[4], arPVN: Number(r[5]) || 0,
+    versija: r[1], laiks: String(r[2]), lietotajs: r[3], statuss: r[4], bezPVN: Number(r[5]) || 0,
     piezime: r[6], irDati: !!r[7]
   })).reverse();
 }
@@ -316,9 +317,9 @@ function exportListXlsx_(u, ids) {
   try {
     const sh = ss.getSheets()[0].setName('Budžeti');
     const head = ['ID', 'Objekts', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Autors', 'Statuss', 'Sagatavots',
-      'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā ar PVN', '€ / m² mēn. ar PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
+      'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā bez PVN', '€ / m² mēn. bez PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
     const rows = list.map(m => [m.id, m.nosaukums, m.adrese, m.pasutitajs, m.izpilditajs, m.autors, m.statuss,
-      m.sagatavots, m.plat || '', m.bezPVN, m.arPVN, round2_(m.arPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
+      m.sagatavots, m.plat || '', m.bezPVN, m.arPVN, round2_(m.bezPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
     sh.getRange(1, 1, 1, head.length).setValues([head]);
     if (rows.length) sh.getRange(2, 1, rows.length, head.length).setValues(rows);
     styleHeader_(sh.getRange(1, 1, 1, head.length));
@@ -381,7 +382,7 @@ function buildWorkbook_(ss, d, c, meta) {
     ['Budžeta ID', meta.id || ''], ['Autors', meta.autors || ''], ['Statuss', meta.statuss || '']];
   t.getRange(4, 1, obj.length, 2).setValues(obj);
   t.getRange(4, 1, obj.length, 1).setFontColor('#777777');
-  t.getRange(4, 4, 3, 2).setValues([['Cena mēnesī ar PVN', c.arPVN], ['Cena mēnesī bez PVN', c.bezPVN], ['Uzk. izd. = € / dzīvokļu m² (ar PVN)', c.perM2 == null ? '' : c.perM2]]).setFontWeight('bold');
+  t.getRange(4, 4, 3, 2).setValues([['Cena mēnesī bez PVN', c.bezPVN], ['Cena mēnesī ar PVN', c.arPVN], ['Uzk. izd. = € / dzīvokļu m² (bez PVN)', c.perM2bez == null ? '' : c.perM2bez]]).setFontWeight('bold');
   t.getRange(4, 5, 2, 1).setNumberFormat(EUR);
   t.getRange(6, 5).setNumberFormat('0.0000 "€"');
   let r = 15;
@@ -498,10 +499,10 @@ function pdfHtml_(d, c, meta) {
     <table class="obj"><tr><th colspan="2">Objekts</th></tr>${objRows}</table>
   </td><td style="vertical-align:top;padding:0;border:0">
     <table class="res"><tr><th colspan="2">Rezultāts</th></tr>
-    <tr><td>Cena mēnesī ar PVN</td><td class="r big">${eur_(c.arPVN)}</td></tr>
-    <tr><td class="muted">Cena mēnesī bez PVN</td><td class="r"><b>${eur_(c.bezPVN)}</b></td></tr>
-    <tr><td class="muted">Cena gadā ar PVN</td><td class="r">${eur_(c.arPVN * 12)}</td></tr>
-    <tr><td class="muted">Uzk. izd. = € / dzīvokļu m²</td><td class="r"><b>${c.perM2 == null ? '—' : '€' + num_(c.perM2, 4)}</b></td></tr></table>
+    <tr><td>Cena mēnesī bez PVN</td><td class="r big">${eur_(c.bezPVN)}</td></tr>
+    <tr><td class="muted">Cena gadā bez PVN</td><td class="r"><b>${eur_(c.bezPVN * 12)}</b></td></tr>
+    <tr><td class="muted">Uzk. izd. = € / dzīvokļu m² bez PVN</td><td class="r"><b>${c.perM2bez == null ? '—' : '€' + num_(c.perM2bez, 4)}</b></td></tr>
+    <tr><td class="muted">Cena mēnesī ar PVN (${pct_(d.param.pvn, 0)})</td><td class="r">${eur_(c.arPVN)}</td></tr></table>
   </td></tr></table>
   <h2>Tāme</h2>
   <table><tr><th>Nr.</th><th>Pozīcija (MK 408 — 1.1. Sanitārā apkope)</th><th class="r">Mēnesī</th><th class="r">Gadā</th><th class="r">Daļa</th></tr>${lines}</table>
@@ -633,4 +634,21 @@ function aiKadastrs_(u, text) {
   const j = aiJson_(system, text, schema, 1500);
   log_(u.name, 'AI kadastrs', '', String(j.adrese || ''));
   return j;
+}
+
+
+/* AI: telpu nosaukumi no kadastra → kategorijas */
+function aiTelpas_(u, nosaukumi) {
+  const names = (nosaukumi || []).map(String).filter(Boolean).slice(0, 200);
+  if (!names.length) return [];
+  const cats = ['kapnu', 'ratinu', 'lifts', 'tehniskas', 'atputas', 'saimniecibas', 'arpus', 'garaza', 'atkritumi', 'cits'];
+  const schema = { type: 'object', properties: { telpas: { type: 'array', items: { type: 'object', properties: {
+    nosaukums: { type: 'string' }, kategorija: { type: 'string', enum: cats } }, required: ['nosaukums', 'kategorija'] } } }, required: ['telpas'] };
+  const system = ['Klasificē daudzdzīvokļu mājas koplietošanas telpu nosaukumus no Latvijas kadastra uzkopšanas tāmei. Izsauc rīku aizpildit_formu.',
+    'kapnu = kāpņu telpas, gaiteņi, koridori, vestibili, tambūri, priekštelpas, halles, ieejas; ratinu = ratiņu/velosipēdu telpas;',
+    'lifts = lifta šahtas un lifti (telpa "Lifts"); tehniskas = lifta mašīntelpa/lifta telpa, siltummezgls, elektro, ūdens, sūkņi, ventilācija, katlu, skaitītāji, apsaimniekotāja telpa;',
+    'atputas = atpūtas telpas, sanmezgli, WC, dušas; saimniecibas = saimniecības telpas, pagrabi, noliktavas, bēniņi, žāvētavas, veļas telpas;',
+    'arpus = balkoni, lodžijas, terases, ārtelpas; garaza = garāžas, autostāvvietas; atkritumi = atkritumu telpas/šahtas; cits = viss pārējais.'].join('\n');
+  const j = aiJson_(system, names.join('\n'), schema, 1200);
+  return (j.telpas || []).filter(x => cats.indexOf(x.kategorija) >= 0);
 }
