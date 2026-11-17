@@ -554,7 +554,8 @@
   .gap{height:14px}
   .hint{margin-top:5px;font-size:12px;color:var(--ink-3);font-weight:600}
   .secs{overflow-x:auto;scrollbar-width:none;margin-bottom:12px;position:sticky;top:calc(var(--safe-t) + 64px);z-index:20;
-    background:var(--g-pop);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:0 8px 18px -12px rgba(20,35,28,.35)}
+    background:#f3f7f4;box-shadow:0 8px 18px -12px rgba(20,35,28,.35)}
+  :root[data-theme="dark"] .secs{background:#18211d}
   @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){ .secs{background:#fff} :root[data-theme="dark"] .secs{background:#1d2622} }
   .secs::-webkit-scrollbar{display:none}
   .secs button{flex:0 0 auto;padding:9px 14px}
