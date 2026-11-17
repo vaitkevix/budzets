@@ -12,7 +12,16 @@
   box.querySelector('#shk_x').onclick = () => { box.remove(); window.__shKad = 0; };
   const fail = (t) => { st('<span style="color:#c02626">' + t + '</span>'); window.__shKad = 0; };
 
-  const get = async (u) => new DOMParser().parseFromString(await (await fetch(u, { credentials: 'include' })).text(), 'text/html');
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const get = async (u) => {
+    u = u.replace(/^https?:\/\/(www\.)?kadastrs\.lv/, location.origin);
+    for (let i = 0; i < 4; i++) {
+      try { const r = await fetch(u, { credentials: 'include' }); if (r.ok) return new DOMParser().parseFromString(await r.text(), 'text/html'); }
+      catch (e) {}
+      await sleep(700 * (i + 1));
+    }
+    throw new Error('Neizdevās ielādēt ' + u.split('?')[0]);
+  };
   const txt = (d) => d.body.innerText.replace(/[ \t ]+/g, ' ');
   const num = (s) => { const n = parseFloat(String(s || '').replace(/\s/g, '').replace(',', '.')); return isFinite(n) ? n : null; };
   const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -63,7 +72,9 @@
         }
         out.grupas.push(grp); done++; st('Lasu telpu grupas: ' + done + ' / ' + list.length, 15 + done / list.length * 80);
       };
-      for (let i = 0; i < list.length; i += 5) await Promise.all(list.slice(i, i + 5).map(one));
+      const skip = [];
+      for (let i = 0; i < list.length; i += 3) await Promise.all(list.slice(i, i + 3).map(g => one(g).catch(() => skip.push(g.t))));
+      out.neizdevas = skip;
       // 5) Apkopojums pa telpu nosaukumiem (tikai koplietošanas)
       const agg = {};
       out.grupas.filter(g => /^1200\b|koplietošanas/i.test(g.lv)).forEach(g => g.telpas.forEach(r => {
