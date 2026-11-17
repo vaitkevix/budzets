@@ -22,7 +22,7 @@ const TPL_HEAD = ['ID', 'Nosaukums', 'Apraksts', 'Autors', 'Izveidots', 'Dati'];
 const APP_URL = 'https://vaitkevix.github.io/budzets/';
 const BUD_HEAD = ['ID', 'Nosaukums', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Sagatavots', 'Derīgs līdz',
   'Autors', 'Statuss', 'Cena bez PVN', 'Cena ar PVN', 'Versija', 'Izveidots', 'Atjaunots',
-  'Vadības komentārs', 'Izskatīja', 'Dati', 'Dzīvokļu m²'];
+  'Vadības komentārs', 'Izskatīja', 'Dati', 'Dzīvokļu m²', 'Sērija'];
 const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena bez PVN', 'Piezīme', 'Dati'];
 const LOG_HEAD = ['Laiks', 'Lietotājs', 'Darbība', 'Budžets', 'Info'];
 const STATUSES = ['Melnraksts', 'Iesniegts', 'Apstiprināts', 'Noraidīts', 'Arhivēts'];
@@ -183,7 +183,7 @@ function rowToMeta_(r) {
     autors: o['Autors'], statuss: o['Statuss'], bezPVN: Number(o['Cena bez PVN']) || 0,
     arPVN: Number(o['Cena ar PVN']) || 0, versija: Number(o['Versija']) || 1,
     izveidots: o['Izveidots'], atjaunots: o['Atjaunots'], komentars: o['Vadības komentārs'],
-    izskatija: o['Izskatīja'], plat: Number(o['Dzīvokļu m²']) || 0,
+    izskatija: o['Izskatīja'], plat: Number(o['Dzīvokļu m²']) || 0, serija: o['Sērija'] || '',
     perM2: (Number(o['Dzīvokļu m²']) > 0) ? round2_(Number(o['Cena bez PVN']) / Number(o['Dzīvokļu m²']) * 100) / 100 : null
   };
 }
@@ -238,6 +238,8 @@ function saveBudget_(u, payload) {
     const c = payload.calc || {};
     const o = d.objekts || {};
     const sh = sh_(SHEETS.BUD);
+    const hc = sh.getRange(1, BUD_HEAD.length);
+    if (hc.getValue() !== BUD_HEAD[BUD_HEAD.length - 1]) sh.getRange(1, 1, 1, BUD_HEAD.length).setValues([BUD_HEAD]).setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff');
     const ts = now_();
     let id = payload.id;
     let row, version = 1, status = payload.statuss || 'Melnraksts', created = ts, autors = u.name, koment = '', izsk = '';
@@ -256,7 +258,7 @@ function saveBudget_(u, payload) {
     const json = JSON.stringify(d);
     const values = [id, o.nosaukums || '', o.adrese || '', o.pasutitajs || '', o.izpilditajs || '',
       o.sagatavots || '', '', autors, status, round2_(c.bezPVN), round2_(c.arPVN), version,
-      created, ts, koment, izsk, json, Number(o.lietderiga) || ''];
+      created, ts, koment, izsk, json, Number(o.lietderiga) || '', o.serija || ''];
     if (row) sh.getRange(row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
     sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.bezPVN), payload.piezime || '', json]);
@@ -380,18 +382,18 @@ function exportListXlsx_(u, ids) {
   try {
     const sh = ss.getSheets()[0].setName('Budžeti');
     const head = ['ID', 'Objekts', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Autors', 'Statuss', 'Sagatavots',
-      'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā bez PVN', '€ / m² mēn. bez PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
+      'Sērija', 'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā bez PVN', '€ / m² mēn. bez PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
     const rows = list.map(m => [m.id, m.nosaukums, m.adrese, m.pasutitajs, m.izpilditajs, m.autors, m.statuss,
-      m.sagatavots, m.plat || '', m.bezPVN, m.arPVN, round2_(m.bezPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
+      m.sagatavots, serijaName_(m.serija), m.plat || '', m.bezPVN, m.arPVN, round2_(m.bezPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
     sh.getRange(1, 1, 1, head.length).setValues([head]);
     if (rows.length) sh.getRange(2, 1, rows.length, head.length).setValues(rows);
     styleHeader_(sh.getRange(1, 1, 1, head.length));
     if (rows.length) {
-      sh.getRange(2, 10, rows.length, 3).setNumberFormat('#,##0.00 "€"');
+      sh.getRange(2, 11, rows.length, 3).setNumberFormat('#,##0.00 "€"');
       const t = rows.length + 2;
-      sh.getRange(t, 9).setValue('Kopā').setFontWeight('bold');
-      sh.getRange(2, 13, rows.length, 1).setNumberFormat('0.0000 "€"');
-      sh.getRange(t, 10, 1, 3).setFormulas([[`=SUM(J2:J${t - 1})`, `=SUM(K2:K${t - 1})`, `=SUM(L2:L${t - 1})`]])
+      sh.getRange(t, 10).setValue('Kopā').setFontWeight('bold');
+      sh.getRange(2, 14, rows.length, 1).setNumberFormat('0.0000 "€"');
+      sh.getRange(t, 11, 1, 3).setFormulas([[`=SUM(K2:K${t - 1})`, `=SUM(L2:L${t - 1})`, `=SUM(M2:M${t - 1})`]])
         .setNumberFormat('#,##0.00 "€"').setFontWeight('bold');
     }
     sh.setFrozenRows(1);
@@ -442,7 +444,7 @@ function buildWorkbook_(ss, d, c, meta) {
   t.getRange('A1').setValue('Sanitārās apkopes tāme').setFontSize(16).setFontWeight('bold').setFontColor('#0f6b5c');
   t.getRange('A2').setValue('Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».').setFontColor('#777777');
   const obj = [['Nosaukums', o.nosaukums || ''], ['Adrese', o.adrese || ''], ['Pasūtītājs', o.pasutitajs || ''],
-    ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs || ''], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '') + ' / ' + (o.lietderiga || '')],
+    ['Ēkas sērija', serijaName_(o.serija) + (o.gads ? ' · ' + o.gads + '. g.' : '') + (o.stavi ? ' · ' + o.stavi + ' st.' : '')], ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs || ''], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '') + ' / ' + (o.lietderiga || '')],
     ['Budžeta ID', meta.id || ''], ['Autors', meta.autors || ''], ['Statuss', meta.statuss || '']];
   t.getRange(4, 1, obj.length, 2).setValues(obj);
   t.getRange(4, 1, obj.length, 1).setFontColor('#777777');
@@ -544,6 +546,7 @@ function pdfHtml_(d, c, meta) {
   .foot{margin-top:18px;color:#999;font-size:7.5pt}
   .copy{margin-top:16px;padding-top:6px;border-top:1px solid #e3e3e3;color:#8a8a8a;font-size:7.5pt;text-align:center}`;
   const objRows = [['Nosaukums', o.nosaukums], ['Adrese', o.adrese], ['Pasūtītājs', o.pasutitajs],
+    ['Ēkas sērija', serijaName_(o.serija) + (o.gads ? ' · ' + o.gads + '. g.' : '') + (o.stavi ? ' · ' + o.stavi + ' st.' : '')],
     ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '—') + ' / ' + (o.lietderiga ? num_(o.lietderiga, 1) : '—')]]
     .map(r => `<tr><td class="muted">${esc_(r[0])}</td><td class="v">${esc_(r[1] || '')}</td></tr>`).join('');
   const lines = (c.lines || []).map(l => `<tr class="${l.total ? 'grand' : (l.bold ? 'tot' : '')}">
@@ -667,6 +670,7 @@ function aiKadastrs_(u, text) {
       dzivokli: Object.assign({ description: 'Dzīvokļu skaits, ja norādīts' }, N),
       lietderiga: Object.assign({ description: 'Dzīvokļu m² bez ārtelpām/balkoniem: "Dzīvokļu platība"; ja tādas nav — "Dzīvokļu kopējā platība" mīnus "Dzīvokļu ārtelpu platība"' }, N),
       stavi: Object.assign({ description: 'Virszemes stāvu skaits' }, N),
+      gads: Object.assign({ description: 'Uzbūvēšanas gads' }, N),
       lifti: Object.assign({ description: 'Liftu skaits, ja norādīts' }, N),
       zemes_platiba: Object.assign({ description: 'Zemes vienības platība m², ja norādīta' }, N),
       apbuves_laukums: Object.assign({ description: 'Būves apbūves laukums m², ja norādīts' }, N),
@@ -834,3 +838,10 @@ function tplDel_(u, id) {
   }
   return false;
 }
+
+/* Ēku sērijas (jāsakrīt ar index.html SERIJAS) */
+const SERIJAS = { pirmskara: 'Pirmskara ēka', koka: 'Koka māja', stalina: 'Staļina laika ēka', '316': '316. sērija', '318': '318. sērija', '464': '464. sērija',
+  lt_vecais: 'Lietuviešu vecais projekts', lt_jaunais: 'Lietuviešu jaunais projekts', lt: 'Lietuviešu projekts', '103': '103. sērija', '467': '467. sērija', '602': '602. sērija',
+  '602u': '602. uzlabotā sērija', '119': '119. sērija', '104': '104. sērija', mazgim: 'Mazģimeņu projekts', cehu: 'Čehu projekts', franc: 'Franču projekts',
+  brezn: 'Brežņeva laika projekts', spec: 'Specprojekts', jauns: 'Jaunais projekts', cits: 'Cits' };
+function serijaName_(k) { return k ? (SERIJAS[k] || String(k)) : '—'; }

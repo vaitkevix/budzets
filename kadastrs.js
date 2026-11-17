@@ -42,7 +42,7 @@
       adrese: addrOf(b.row), nosaukums_buvei: fieldS(bt, 'Nosaukums'), tips: fieldS(bt, 'Būves tips'),
       kopeja: field(bt, 'Kopējā platība (kv.m.)'), dzivoklu_m2: field(bt, 'Dzīvokļu platība (kv.m.)'),
       kopl_iek: field(bt, 'Koplietošanas iekštelpu platība (kv.m.)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība (kv.m.)'),
-      stavi: field(bt, 'Virszemes stāvu skaits'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums (kv.m.)'),
+      stavi: field(bt, 'Virszemes stāvu skaits'), gads: field(bt, 'Ekspluatācijas uzsākšanas gads') || field(bt, 'Būvniecības pabeigšanas gads') || field(bt, 'Uzbūvēšanas gads'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums (kv.m.)'),
       dzivokli: apts.length, telpas: [], citas_grupas: [], neizdevas: [] };
     const grupas = []; let done = 0;
     const one = async (g) => {

@@ -26,6 +26,7 @@
     document.documentElement.setAttribute('data-theme', t); })();
 </script>
 <script src="config.js"></script>
+<script src="serijas.js"></script>
 <style>
   /* ===== Krāsas un virsmas (Izvešanas pieteikumu stils) ===== */
   :root{
@@ -467,6 +468,20 @@
   .btn .i,.more-btn .i{width:18px;height:18px}
   .ai-spark{width:40px;height:40px;flex:none;border-radius:12px;display:grid;place-items:center;color:#7c3aed;background:rgba(124,58,237,.12)}
   .ai-spark .i{width:22px;height:22px}
+  .ser-pick{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:18px;border:1px solid var(--g-brd);background:var(--g-sheen),var(--surface-solid);box-shadow:var(--g-shadow-sm);cursor:pointer;font:inherit;color:var(--ink);text-align:left}
+  .ser-pick svg{width:84px;height:70px;flex:none;border-radius:12px}
+  .ser-pick b{display:block;font-size:15px;font-weight:800}.ser-pick small{display:block;font-size:12px;color:var(--ink-3);font-weight:600;margin-top:2px}
+  .ser-pick .chev{margin-left:auto;color:var(--ink-3);font-size:20px}
+  .ser-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  @media (max-width:420px){.ser-grid{grid-template-columns:repeat(2,1fr)}}
+  .ser-tile{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:6px 6px 9px;border-radius:16px;border:1px solid var(--g-brd);background:var(--surface-solid);cursor:pointer;font:inherit;color:var(--ink);text-align:center;transition:transform .15s,border-color .2s}
+  .ser-tile:active{transform:scale(.97)} .ser-tile svg{width:100%;height:auto;border-radius:11px;display:block}
+  .ser-tile b{font-size:12.5px;font-weight:800;line-height:1.2}.ser-tile small{font-size:10.5px;color:var(--ink-3);font-weight:600;line-height:1.2}
+  .ser-tile.on{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
+  .ser-tile.sug::before{content:'Ieteikts';position:absolute;top:9px;left:9px;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:999px;background:var(--brand);color:#fff}
+  .ser-sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.ser-sug button{cursor:pointer;font:inherit}
+  .chip.ser{padding:2px 9px 2px 3px}.chip.ser svg{width:26px;height:22px;border-radius:6px}
+  html.dark .ser-pick svg,html.dark .ser-tile svg,html.dark .chip.ser svg{filter:brightness(.92)}
   .ptiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .ptile{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 6px 12px;border-radius:20px;border:1px solid var(--g-brd);
     background:var(--g-sheen),var(--surface-solid);box-shadow:var(--g-shadow-sm);cursor:pointer;text-align:center;font:inherit;color:var(--ink);transition:transform .15s,box-shadow .2s,border-color .2s}
@@ -698,7 +713,7 @@ const WD = ['svētdiena','pirmdiena','otrdiena','trešdiena','ceturtdiena','piek
 const MON = ['janvāris','februāris','marts','aprīlis','maijs','jūnijs','jūlijs','augusts','septembris','oktobris','novembris','decembris'];
 const STATUSES = ['Melnraksts','Iesniegts','Apstiprināts','Noraidīts','Arhivēts'];
 const PILL = { 'Melnraksts':'draft', 'Iesniegts':'nepub', 'Apstiprināts':'done', 'Noraidīts':'bad', 'Arhivēts':'wait' };
-const S = { pin:'', user:null, list:[], view:'list', f:{st:'all', q:'', autors:'', gads:''},
+const S = { pin:'', user:null, list:[], view:'list', f:{st:'all', q:'', autors:'', gads:'', ser:''},
   id:null, meta:null, d:null, sec:'objekts', ro:false, dirty:false, histVer:null, c:null, aiUndo:null };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -880,6 +895,7 @@ function filtered(){
     if(f.st==='all' ? b.statuss==='Arhivēts' : b.statuss!==f.st) return false;
     if(f.autors && b.autors!==f.autors) return false;
     if(f.gads && yearOf(b)!==f.gads) return false;
+    if(f.ser && (b.serija||'')!==(f.ser==='-'?'':f.ser)) return false;
     if(q && ![b.id,b.nosaukums,b.adrese,b.pasutitajs,b.autors].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -888,17 +904,20 @@ function drawList(){
   const L=S.list, f=S.f, cnt=s=>L.filter(b=>b.statuss===s).length;
   const segs=[['all','Aktīvie',L.filter(b=>b.statuss!=='Arhivēts').length],['Melnraksts','Melnr.',cnt('Melnraksts')],['Iesniegts','Iesniegti',cnt('Iesniegts')],['Apstiprināts','Apstipr.',cnt('Apstiprināts')],['Noraidīts','Noraid.',cnt('Noraidīts')],['Arhivēts','Arhīvs',cnt('Arhivēts')]];
   $('listFilter').innerHTML=segs.map(([k,l,n])=>`<button data-k="${k}" class="${f.st===k?'on':''}">${l}<span class="cnt">${n}</span></button>`).join('');
+  const sers=[...new Set(L.map(b=>b.serija||''))];
   const authors=[...new Set(L.map(b=>b.autors))].sort(), years=[...new Set(L.map(yearOf).filter(Boolean))].sort().reverse();
-  $('listSel').hidden = !(isMgmt() && (authors.length>1 || years.length>1));
+  $('listSel').hidden = !((isMgmt() && (authors.length>1 || years.length>1)) || sers.length>1);
   $('listSel').innerHTML=`<select class="select" id="fAut"><option value="">Visi autori</option>${authors.map(a=>`<option ${a===f.autors?'selected':''}>${esc(a)}</option>`).join('')}</select>
-    <select class="select" id="fYear"><option value="">Visi gadi</option>${years.map(y=>`<option ${y===f.gads?'selected':''}>${y}</option>`).join('')}</select>`;
+    <select class="select" id="fYear"><option value="">Visi gadi</option>${years.map(y=>`<option ${y===f.gads?'selected':''}>${y}</option>`).join('')}</select>
+    <select class="select" id="fSer"><option value="">Visas sērijas</option>${SER.list.filter(x=>sers.includes(x.key)).map(x=>`<option value="${x.key}" ${x.key===f.ser?'selected':''}>${esc(x.name)}</option>`).join('')}${sers.includes('')?`<option value="-" ${f.ser==='-'?'selected':''}>Nav norādīta</option>`:''}</select>`;
+  $('fSer').onchange=e=>{ S.f.ser=e.target.value; drawList(); };
   $('fAut').onchange=e=>{ S.f.autors=e.target.value; drawList(); }; $('fYear').onchange=e=>{ S.f.gads=e.target.value; drawList(); };
   const F=filtered();
   $('listBody').innerHTML = F.length ? '<div class="list">'+F.map((b,i)=>`<article class="card task st-${esc(b.statuss)}" style="animation-delay:${Math.min(i,8)*35}ms" data-id="${esc(b.id)}">
       <div class="task-top"><div><h3 class="addr">${esc(b.nosaukums||b.adrese||'(bez nosaukuma)')}</h3>
         <div class="sub">${esc(b.adrese||'')}${b.pasutitajs?' · <b>'+esc(b.pasutitajs)+'</b>':''}</div></div>
         <div class="price">${eur(b.bezPVN)}<small>${b.perM2?eur4(b.perM2)+' / m²':'mēn. bez PVN'}</small></div></div>
-      <div class="chips"><span class="pill ${PILL[b.statuss]||'wait'}">${esc(b.statuss)}</span><span class="chip">${esc(b.id)} · v${b.versija}</span><span class="chip">${esc(b.autors)}</span><span class="chip">${lvDate(b.atjaunots)}</span></div>
+      <div class="chips"><span class="pill ${PILL[b.statuss]||'wait'}">${esc(b.statuss)}</span><span class="chip">${esc(b.id)} · v${b.versija}</span>${b.serija?`<span class="chip ser">${serSvg(b.serija)}${esc(SER.name(b.serija))}</span>`:''}<span class="chip">${esc(b.autors)}</span><span class="chip">${lvDate(b.atjaunots)}</span></div>
       ${b.statuss==='Noraidīts'&&b.komentars?`<div class="note bad"><b>Vadība:</b> ${esc(b.komentars)}</div>`:''}
     </article>`).join('')+'</div>'
     : `<div class="empty"><div class="ic">${IC.doc}</div><b>${L.length?'Nekas neatbilst filtram':'Vēl nav neviena budžeta'}</b>${isMaker()&&!L.length?'Spiediet «Jauns», lai izveidotu pirmo.':''}</div>`;
@@ -924,6 +943,9 @@ function drawStats(){
     </div>
     ${bars('Mēneša summa bez PVN pa autoriem',by('autors'))}
     ${bars('Mēneša summa bez PVN pa statusiem',by('statuss'))}
+    ${(()=>{ const m={}; L.filter(b=>b.plat>0).forEach(b=>{ const k=b.serija||''; const x=m[k]=m[k]||{s:0,p:0,n:0}; x.s+=b.bezPVN; x.p+=b.plat; x.n++; });
+      const rows=Object.entries(m).map(([k,x])=>[k,x.s/x.p,x.n]).sort((a,b)=>b[1]-a[1]); const mx=Math.max(0.0001,...rows.map(r=>r[1]));
+      return `<div class="card bar-card"><h4>Vid. € / dzīv. m² bez PVN pa sērijām</h4>${rows.map(([k,v,n])=>`<div class="bar-row" style="grid-template-columns:minmax(120px,48%) 1fr auto"><div class="n" style="white-space:normal;line-height:1.2">${k?serSvg(k,30):''}<span>${esc(k?SER.name(k):'Nav norādīta')} <span class="muted">· ${n}</span></span></div><div class="bar"><span style="width:${Math.round(v/mx*100)}%"></span></div><div class="m">${eur4(v)}</div></div>`).join('')||'<div class="muted">Nav datu</div>'}</div>`; })()}
     <button class="btn btn-glass btn-block" id="listXlsBtn">${IC.xls} Visu budžetu saraksts Excel</button>`;
   $('listXlsBtn').onclick=async()=>{ const b=$('listXlsBtn'); busyBtn(b,true); try{ const r=await api('listXlsx',{ids:[]}); download(r.file); }catch(err){ toast(netMsg(err),'err'); } finally{ busyBtn(b,false); } };
 }
@@ -939,7 +961,7 @@ function blankBudget(){
   const w=(n,zona,izp,src,m2,reizes,raziba)=>({id:uid(),on:true,nosaukums:n,zona,izp,src,m2,reizes,raziba});
   const A='Apkopēja', Sx='Sētnieks', I='iekštelpas', Te='teritorija';
   return {
-    objekts:{ nosaukums:'', adrese:'', pasutitajs:'', izpilditajs:'Selectum home', sagatavots:isoToday(), dzivokli:'', lietderiga:'', piezimes:'' },
+    objekts:{ nosaukums:'', adrese:'', pasutitajs:'', izpilditajs:'Selectum home', sagatavots:isoToday(), dzivokli:'', lietderiga:'', serija:'', gads:'', stavi:'', piezimes:'' },
     telpas,
     darbi:[
       w('Kāpņu telpu, gaiteņu, vestibila un ratiņu telpas sausā un mitrā uzkopšana',I,A,'',0,4,200),
@@ -1219,6 +1241,22 @@ const vh=(t,p)=>`<div class="view-head"><h2>${t}</h2>${p?`<p>${p}</p>`:''}</div>
 const aiBtn=()=>`<button type="button" class="ai-btn" onclick="aiSheet()"><span class="ai-spark">${IC.spark}</span><span><b>Aizpildīt no kadastra ar AI</b><small>Ielīmējiet būves datus no kadastrs.lv — objekts un platības aizpildīsies paši</small></span></button>
   ${S.aiUndo?`<div class="ai-note ok">${esc(S.aiUndo.note)}<div class="ai-bar"><button class="ai-mini undo" onclick="aiUndo()">${IC.undo} Atsaukt</button></div></div>`:''}`;
 
+/* ---------- Ēkas sērija ---------- */
+const SER=self.SERIJAS;
+const serSvg=(k,sz)=>SER?SER.svg(k||'cits',sz):'';
+function serField(){ const o=S.d.objekts, k=o.serija, it=k&&SER.list.find(x=>x.key===k);
+  const sug=SER.suggest(o.gads,o.stavi).filter(x=>x!==k).slice(0,4);
+  return `<div class="field"><span class="label">Ēkas sērija</span>
+    <button type="button" class="ser-pick" ${S.ro?'disabled':''} onclick="serSheet()">${serSvg(k)}<span><b>${it?esc(it.name):'Izvēlēties sēriju'}</b><small>${it?esc(it.desc):'Pirmskara, Staļina, 103.–602. sērija, specprojekti, jaunie…'}</small></span><span class="chev">›</span></button>
+    <div class="g2" style="margin-top:10px">${fld('Būvniecības gads',inp('objekts.gads',{t:'n',ph:'piem. 1978',ch:1}))}${fld('Virszemes stāvi',inp('objekts.stavi',{t:'n',ph:'piem. 9',ch:1}))}</div>
+    ${!S.ro&&sug.length?`<div class="ser-sug"><span class="hint" style="margin:0;align-self:center">Varētu būt:</span>${sug.map(x=>`<button type="button" class="chip" onclick="serSet('${x}')">${esc(SER.name(x))}</button>`).join('')}</div>`:''}</div>`; }
+function serSheet(){ const o=S.d.objekts, sug=SER.suggest(o.gads,o.stavi);
+  openSheet(`<h3 style="margin:0 0 4px">Ēkas sērija</h3><p class="muted" style="margin:0 0 12px">Izvēlieties tipveida projektu vai sēriju${sug.length?' — ieteiktie pēc gada un stāviem atzīmēti':''}.</p>
+    <div class="ser-grid">${SER.list.map(x=>`<button type="button" class="ser-tile ${x.key===o.serija?'on':''} ${sug.includes(x.key)&&x.key!==o.serija?'sug':''}" onclick="serSet('${x.key}');closeSheet()">${serSvg(x.key)}<b>${esc(x.name)}</b>${x.desc?`<small>${esc(x.desc)}</small>`:''}</button>`).join('')}</div>
+    ${o.serija?`<button class="btn btn-glass btn-block" style="margin-top:12px" onclick="serSet('');closeSheet()">Notīrīt sēriju</button>`:''}`); }
+function serSet(k){ S.d.objekts.serija=k; S.dirty=true; renderEditor(); }
+function serAuto(o){ if(o.serija) return; const g=+o.gads||0; if(g && g<1940) o.serija='pirmskara'; else if(g>=1992) o.serija='jauns'; }
+
 const PANES={
   objekts(){ const o='objekts.';
     return vh('Objekts','Pamatdati tāmes galvenei.')+`<div class="card panel">${S.ro?'':aiBtn()}
@@ -1226,6 +1264,7 @@ const PANES={
       ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga'}))}
       <div class="g2">${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas'}))}${fld('Izpildītājs',inp(o+'izpilditajs'))}</div><div class="gap"></div>
       <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}),'bez balkoniem; no tās rēķina € / m²')}</div><div class="gap"></div>
+      ${serField()}<div class="gap"></div>
       ${fld('Piezīmes <span class="opt">· nav obligāti</span>',`<textarea class="textarea" data-p="objekts.piezimes" oninput="onIn(this)">${esc(S.d.objekts.piezimes||'')}</textarea>`)}
       ${S.ro?'':`<button class="btn btn-primary btn-block" onclick="setSec('platibas')">Tālāk: platības</button>`}</div>`;
   },
@@ -1384,6 +1423,7 @@ async function kadImport(k, merge){
   try{ const r=await api('aiTelpas',{nosaukumi:k.telpas.filter(t=>!t.ar).map(t=>t.nosaukums)}); (r.kat||[]).forEach(x=>{ if(x.nosaukums in cat && cat[x.nosaukums]!=='arpus') cat[x.nosaukums]=x.kategorija; }); viaAI=(r.kat||[]).length>0; }catch(e){}
   const short=String(k.adrese||'').split(',')[0].replace(/\s+iela\s+/gi,' ');
   if(k.adrese) o.adrese=k.adrese; if(k.dzivokli) o.dzivokli=k.dzivokli; if(k.dzivoklu_m2) o.lietderiga=k.dzivoklu_m2;
+  if(k.gads>1700&&k.gads<2100) o.gads=k.gads; if(k.stavi) o.stavi=k.stavi; serAuto(o);
   if(short) o.nosaukums=short+(k.dzivokli?` (${k.dzivokli} dzīvokļi)`:'');
   o.piezimes=String(o.piezimes||'').replace(/^Kadastrs\.lv.*$\n?/gm,'').trim();
   o.piezimes=(o.piezimes?o.piezimes+'\n':'')+`Kadastrs.lv ${lvDate(isoToday())}: ${k.multi?k.multi+' būves':'būve'} ${k.buve||''}, ${k.stavi||'?'} virszemes + ${k.pazemes||0} pazemes stāvi, kopējā platība ${nfmt(k.kopeja)} m², zeme ${nfmt(k.zeme_m2)} m².`;
@@ -1426,7 +1466,7 @@ function kadCombine(list){
   const adr=[...new Set(list.map(k=>k.adrese).filter(Boolean))], city=adr.length?adr[0].split(',').slice(1).join(',').trim():'';
   const S_=(f)=>list.reduce((s,k)=>s+(+k[f]||0),0), M_=(f)=>Math.max(0,...list.map(k=>+k[f]||0));
   return { multi:list.length, buve:list.map(k=>k.buve).join(', '), adrese:adr.map(a=>a.split(',')[0]).join(' / ')+(city?', '+city:''),
-    kopeja:r1(S_('kopeja')), dzivoklu_m2:r1(S_('dzivoklu_m2')), dzivokli:S_('dzivokli'), stavi:M_('stavi'), pazemes:M_('pazemes'),
+    kopeja:r1(S_('kopeja')), dzivoklu_m2:r1(S_('dzivoklu_m2')), dzivokli:S_('dzivokli'), stavi:M_('stavi'), pazemes:M_('pazemes'), gads:(()=>{ const g=list.map(k=>+k.gads||0).filter(Boolean); return g.length?Math.min(...g):null; })(),
     zeme_m2:Object.values(zemes).reduce((s,v)=>s+v,0), apbuve:list.reduce((s,k)=>s+kadApb(k),0), lifti_est:list.reduce((s,k)=>s+kadLifti(k),0),
     telpas:Object.values(telp).map(t=>Object.assign(t,{m2:r1(t.m2)})).sort((a,b)=>b.m2-a.m2) };
 }
@@ -1494,7 +1534,7 @@ async function tplUse(id){
 }
 function tplSaveSheet(){
   openSheet(`<h3>Saglabāt kā veidni</h3><p class="lead">Saglabā darbus, biežumus, ražības, inventāru un parametrus. Objekta dati un konkrētās platības netiek saglabātas.</p>
-    ${fld('Veidnes nosaukums',`<input class="input" id="tplName" placeholder="piem. Jaunais projekts 5 stāvi">`)}
+    ${fld('Veidnes nosaukums',`<input class="input" id="tplName" placeholder="piem. Jaunais projekts 5 stāvi" value="${esc(S.d.objekts.serija?SER.name(S.d.objekts.serija)+(S.d.objekts.stavi?' · '+S.d.objekts.stavi+' stāvi':''):'')}">`)}
     ${fld('Apraksts <span class="opt">· nav obligāti</span>',`<input class="input" id="tplDesc" placeholder="piem. ar liftu, pazemes stāvvieta, maz zāles">`)}
     <div class="btn-row"><button class="btn btn-glass" onclick="closeSheet()">Atcelt</button><button class="btn btn-primary" id="tplGo">Saglabāt veidni</button></div>`, true);
   $('tplGo').onclick=async()=>{ const n=$('tplName').value.trim(); if(!n) return toast('Ievadiet nosaukumu','err');
