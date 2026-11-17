@@ -677,7 +677,7 @@
   <footer class="copy">© 2026 VAITKEVIX, SIA. Visas tiesības aizsargātas.</footer>
 </main>
 
-<div class="pricebar" id="pricebar" hidden><div class="pv"><small>Mēnesī ar PVN</small><b id="pbPrice">€0,00</b></div><div class="btn-row" id="pbActs" style="flex:none;gap:6px"></div></div>
+<div class="pricebar" id="pricebar" hidden><div class="pv"><small>Mēnesī ar PVN<span id="pbM2"></span></small><b id="pbPrice">€0,00</b></div><div class="btn-row" id="pbActs" style="flex:none;gap:6px"></div></div>
 <div class="backdrop" id="backdrop"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div id="sheetBody"></div></div>
 <div class="toasts" id="toasts"></div>
@@ -701,6 +701,7 @@ const ls = { get:(k)=>{ try{ return localStorage.getItem(k); }catch(e){ return n
 const r1 = x => Math.round((+x||0)*10)/10;
 const r2 = x => Math.round((+x||0)*100)/100;
 function eur(x){ const n=r2(x); const s=Math.abs(n).toFixed(2).split('.'); s[0]=s[0].replace(/\B(?=(\d{3})+(?!\d))/g,' '); return (n<0?'−':'')+'€'+s[0]+','+s[1]; }
+function eur4(x){ const n=+x||0; return '€'+n.toFixed(n<10?4:2).replace('.',','); }
 function nfmt(x,d){ if(x===''||x==null) return ''; const n=+x; if(!isFinite(n)) return ''; return (d==null? String(Math.round(n*10000)/10000) : n.toFixed(d)).replace('.',','); }
 function pnum(v){ if(typeof v==='number') return v; const n=parseFloat(String(v).replace(/\s/g,'').replace(',','.')); return isFinite(n)?n:0; }
 function pct(x,d){ return ((+x||0)*100).toFixed(d==null?1:d).replace('.',',').replace(/,0$/,'')+'%'; }
@@ -883,7 +884,7 @@ function drawList(){
   $('listBody').innerHTML = F.length ? '<div class="list">'+F.map((b,i)=>`<article class="card task st-${esc(b.statuss)}" style="animation-delay:${Math.min(i,8)*35}ms" data-id="${esc(b.id)}">
       <div class="task-top"><div><h3 class="addr">${esc(b.nosaukums||b.adrese||'(bez nosaukuma)')}</h3>
         <div class="sub">${esc(b.adrese||'')}${b.pasutitajs?' · <b>'+esc(b.pasutitajs)+'</b>':''}</div></div>
-        <div class="price">${eur(b.arPVN)}<small>mēn. ar PVN</small></div></div>
+        <div class="price">${eur(b.arPVN)}<small>${b.perM2?eur4(b.perM2)+' / m²':'mēn. ar PVN'}</small></div></div>
       <div class="chips"><span class="pill ${PILL[b.statuss]||'wait'}">${esc(b.statuss)}</span><span class="chip">${esc(b.id)} · v${b.versija}</span><span class="chip">${esc(b.autors)}</span><span class="chip">${lvDate(b.atjaunots)}</span></div>
       ${b.statuss==='Noraidīts'&&b.komentars?`<div class="note bad"><b>Vadība:</b> ${esc(b.komentars)}</div>`:''}
     </article>`).join('')+'</div>'
@@ -906,6 +907,7 @@ function drawStats(){
       ${tile('b-pend','Gaida izskatīšanu',w.length,ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'))}
       ${tile('b-done','Apstipr. mēnesī',eur(sum(ap)),ic('<path d="m5 12.5 4.5 4.5L19 7.5"/>'))}
       ${tile('b-done','Apstipr. gadā',eur(sum(ap)*12),ic('<path d="M4 20V10M10 20V4M16 20v-7"/>'))}
+      ${(()=>{ const w=L.filter(b=>b.plat>0); const v=w.length? w.reduce((s,b)=>s+b.arPVN,0)/w.reduce((s,b)=>s+b.plat,0) : null; return tile('b-all','Vid. € / dzīv. m²',v==null?'—':eur4(v),ic('<path d="M4 20 20 4M6 6h.01M18 18h.01"/>')); })()}
     </div>
     ${bars('Mēneša summa ar PVN pa autoriem',by('autors'))}
     ${bars('Mēneša summa ar PVN pa statusiem',by('statuss'))}
@@ -919,12 +921,12 @@ function blankBudget(){
   const telpas=[ z('Kāpņu telpas, gaiteņi, vestibils','iek',0), z('Ratiņu / velosipēdu telpa','iek',0),
     z('Tehniskās telpas + apsaimniekotāja telpa','iek',0), z('Koplietošanas atpūtas telpa ar sanmezglu','iek',0),
     z('Koplietošanas terase','iek',0), z('Cietie segumi: brauktuves, stāvvietas, ietves','cieti',0),
-    z('Zālāji, apstādījumi','zale',0) ];
+    z('Zālāji, apstādījumi','zale',0), z('Garāža / pazemes stāvvieta','gar',0) ];
   const T = i => 'z:'+telpas[i].id;
   const w=(n,zona,izp,src,m2,reizes,raziba)=>({id:uid(),on:true,nosaukums:n,zona,izp,src,m2,reizes,raziba});
   const A='Apkopēja', Sx='Sētnieks', I='iekštelpas', Te='teritorija';
   return {
-    objekts:{ nosaukums:'', adrese:'', pasutitajs:'', izpilditajs:'Selectum home', sagatavots:isoToday(), derigs:isoToday(1), dzivokli:'', lietderiga:'', piezimes:'' },
+    objekts:{ nosaukums:'', adrese:'', pasutitajs:'', izpilditajs:'Selectum home', sagatavots:isoToday(), dzivokli:'', lietderiga:'', piezimes:'' },
     telpas,
     darbi:[
       w('Kāpņu telpu, gaiteņu, vestibila un ratiņu telpas sausā un mitrā uzkopšana',I,A,'',0,4,200),
@@ -942,6 +944,7 @@ function blankBudget(){
       w('Bērnu rotaļu laukuma apkope un pārbaude',Te,Sx,'',0,4,200),
       w('Krasta / grāvja un caurtekas sakopšana (5× gadā)',Te,Sx,'',0,0.42,300),
       w('Sniega tīrīšana ietvēs un pie ieejām (ziemā, vidēji gadā)',Te,Sx,'',0,2,300),
+      w('Pazemes stāvvietas / garāžas uzkopšana',Te,Sx,'gar',0,1,600),
       w('Objekta apsekošana (2× nedēļā, 0,5 h)',Te,Sx,'',1,8,2)
     ],
     sezon:[
@@ -977,7 +980,8 @@ function blankBudget(){
       ['Apģērbs','jaka, veste, zābaki',60,1],
       ['Kärcher','mehanizēta slota',550,1],
       ['Instrumenti','',50,1],
-      ['Telpas labiekārtošana','plaukti, tējkanna, krēsls, galds, aptieciņa',100,1]
+      ['Telpas labiekārtošana','plaukti, tējkanna, krēsls, galds, aptieciņa',100,1],
+      ['Laistīšanas aprīkojums','šļūtene, savienojumi, spole, papildu aprīkojums',0,0]
     ].map(a=>({id:uid(),nosaukums:a[0],apraksts:a[1],cena:a[2],on:!!a[3]})),
     param:{ likmeA:4.9, likmeS:4.9, minAlga:780, stundas:168, atv:0.0833, vsaoi:0.2359, neprod:0.15,
             logiDala:0.10, atkritumi:20, stavvieta:0, matIek:0.05, matTer:0.005, invMen:60, transports:50,
@@ -992,8 +996,9 @@ function calc(d){
   const cieti=r2(d.telpas.filter(z=>z.tips==='cieti').reduce((s,z)=>s+pnum(z.m2),0));
   const zale=r2(d.telpas.filter(z=>z.tips==='zale').reduce((s,z)=>s+pnum(z.m2),0));
   const ter=r2(cieti+zale);
+  const gar=r2(d.telpas.filter(z=>z.tips==='gar').reduce((s,z)=>s+pnum(z.m2),0)+pnum(P.stavvieta));
   const logi=Math.round(iek*pnum(P.logiDala));
-  const areas={iek,cieti,zale,ter,logi,atkr:pnum(P.atkritumi),stav:pnum(P.stavvieta)};
+  const areas={iek,cieti,zale,ter,logi,gar,atkr:pnum(P.atkritumi),stav:gar};
   const area = row => { if(!row.src) return pnum(row.m2); if(row.src.indexOf('z:')===0){ const z=d.telpas.find(t=>'z:'+t.id===row.src); return z?pnum(z.m2):0; } return areas[row.src]||0; };
   const fullA=r2(pnum(P.likmeA)*(1+pnum(P.atv))*(1+pnum(P.vsaoi)));
   const fullS=r2(pnum(P.likmeS)*(1+pnum(P.atv))*(1+pnum(P.vsaoi)));
@@ -1052,7 +1057,8 @@ function calc(d){
   lines.push(L('','Cena bez PVN',bezPVN,{bold:true}));
   lines.push(Object.assign(L((n++)+'.','PVN',pvn),{dala:pnum(P.pvn)}));
   lines.push(Object.assign(L('','CENA AR PVN',arPVN,{bold:true,total:true}),{dala:null}));
-  return {areas,fullA,fullS,hA,hS,algaA,algaS,darbi,darbiCost,sezon,sezonGada,sezonMen,invTotal,invIekT,invPagT,inv,
+  const pl=pnum(d.objekts.lietderiga), perM2=pl>0? arPVN/pl : null, perM2bez=pl>0? bezPVN/pl : null;
+  return {pl,perM2,perM2bez,areas,fullA,fullS,hA,hS,algaA,algaS,darbi,darbiCost,sezon,sezonGada,sezonMen,invTotal,invIekT,invPagT,inv,
           materiali,tiesas,netiesas,nepar,pasizm,pelna,bezPVN,pvn,arPVN,minH,minOkA,minOkS,minOk:minOkA&&minOkS,lines,rowCalc};
 }
 
@@ -1076,7 +1082,7 @@ async function openBudget(id, versija){
 }
 function migrate(d){ const b=blankBudget(); d=d||{}; ['objekts','param'].forEach(k=>d[k]=Object.assign({},b[k],d[k]||{})); ['telpas','darbi','sezon','invIek','invPag'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=b[k]; d[k].forEach(x=>{ if(!x.id) x.id=uid(); }); }); return d; }
 function copyBudget(){
-  const d=JSON.parse(JSON.stringify(S.d)); d.objekts.sagatavots=isoToday(); d.objekts.derigs=isoToday(1); d.objekts.nosaukums=(d.objekts.nosaukums||'')+' (kopija)';
+  const d=JSON.parse(JSON.stringify(S.d)); d.objekts.sagatavots=isoToday(); d.objekts.nosaukums=(d.objekts.nosaukums||'')+' (kopija)';
   S.id=null; S.meta={statuss:'Melnraksts',autors:S.user.name,versija:0}; S.d=d; S.ro=false; S.histVer=null; S.dirty=true; S.sec='objekts'; openEditor(); toast('Izveidota kopija — saglabājiet to','ok');
 }
 function openEditor(){
@@ -1093,7 +1099,8 @@ function renderEditor(){
   const c=calc(S.d); S.c=c; const m=S.meta||{};
   let h=`<section class="hero"><div class="hero-text"><div class="hello">${S.id?esc(S.id)+' · v'+(S.histVer||m.versija)+' · '+esc(m.autors||''):'Jauns budžets · '+esc(S.user.name)}</div>
     <h2>${esc(S.d.objekts.nosaukums||S.d.objekts.adrese||'Jauns budžets')}</h2>
-    <div class="pending-line ${m.statuss==='Apstiprināts'?'ok':''}"><i></i><span>${esc(m.statuss||'Melnraksts')}${m.izskatija?' · '+esc(m.izskatija):''}</span></div></div></section>`;
+    <div class="pending-line ${m.statuss==='Apstiprināts'?'ok':''}"><i></i><span>${esc(m.statuss||'Melnraksts')}${m.izskatija?' · '+esc(m.izskatija):''}</span></div>
+    <span class="pending-line" style="margin-left:6px" title="Uzkopšanas izdevumi uz dzīvokļu m² mēnesī ar PVN"><span data-o="m2">${OUT.m2(c)}</span></span></div></section>`;
   if(S.histVer) h+=`<div class="offline">${IC.hist} Vēsturiskā versija v${S.histVer} (tikai skatīšanai). <button class="link-btn" onclick="openBudget('${esc(S.id)}')">Atvērt aktuālo</button></div>`;
   if(m.statuss==='Noraidīts' && m.komentars) h+=`<div class="note bad" style="margin:0 0 12px"><b>Vadība noraidīja:</b> ${esc(m.komentars)}</div>`;
   if(m.statuss==='Apstiprināts' && m.komentars) h+=`<div class="note ok" style="margin:0 0 12px"><b>Vadība:</b> ${esc(m.komentars)}</div>`;
@@ -1105,7 +1112,7 @@ function renderEditor(){
   drawPricebar(c);
 }
 function drawPricebar(c){
-  $('pbPrice').textContent=eur(c.arPVN);
+  $('pbPrice').textContent=eur(c.arPVN); $('pbM2').textContent=c.perM2==null?'':' · '+eur4(c.perM2)+'/m²';
   const m=S.meta||{}, b=[];
   if(!S.ro){
     if(S.id && (m.statuss==='Melnraksts'||m.statuss==='Noraidīts') && !S.dirty) b.push(`<button class="btn btn-glass" onclick="submitSheet()">Iesniegt</button>`);
@@ -1142,13 +1149,13 @@ function onIn(el, rerender){
   if(el.type==='checkbox') v=el.checked; else if(el.dataset.t==='n') v=pnum(el.value); else if(el.dataset.t==='pct') v=pnum(el.value)/100; else v=el.value;
   setP(p,v); if(!S.dirty){ S.dirty=true; S.c&&drawPricebar(S.c); }
   if(rerender) return renderEditor();
-  const c=calc(S.d); S.c=c; $('pbPrice').textContent=eur(c.arPVN); updOut(c);
+  const c=calc(S.d); S.c=c; $('pbPrice').textContent=eur(c.arPVN); $('pbM2').textContent=c.perM2==null?'':' · '+eur4(c.perM2)+'/m²'; updOut(c);
 }
 function updOut(c){ document.querySelectorAll('[data-o]').forEach(el=>{ const f=OUT[el.dataset.o]; if(f) el.innerHTML=f(c, el.dataset.k); }); }
 const OUT={
   h:(c,k)=>nfmt(c.rowCalc[k]?.h,1)+' h', cost:(c,k)=>eur(c.rowCalc[k]?.cost), area:(c,k)=>nfmt(c.rowCalc[k]?.area),
   gada:(c,k)=>eur(c.rowCalc[k]?.gada), men:(c,k)=>eur(c.rowCalc[k]?.men),
-  iek:c=>nfmt(c.areas.iek)+' m²', ter:c=>nfmt(c.areas.ter)+' m²', cieti:c=>nfmt(c.areas.cieti)+' m²', zale:c=>nfmt(c.areas.zale)+' m²', logi:c=>nfmt(c.areas.logi)+' m²',
+  iek:c=>nfmt(c.areas.iek)+' m²', ter:c=>nfmt(c.areas.ter)+' m²', cieti:c=>nfmt(c.areas.cieti)+' m²', zale:c=>nfmt(c.areas.zale)+' m²', logi:c=>nfmt(c.areas.logi)+' m²', gar:c=>nfmt(c.areas.gar)+' m²', m2:c=>c.perM2==null?'€ / m² —':eur4(c.perM2)+' / m²',
   darbiSum:c=>`${nfmt(r1(c.hA+c.hS),1)} h · ${eur(c.darbiCost)}`, sezSum:c=>`${eur(c.sezonGada)} gadā · ${eur(c.sezonMen)} mēn.`,
   invI:c=>eur(c.invIekT), invP:c=>eur(c.invPagT), inv:c=>`${eur(c.invTotal)} ÷ ${S.d.param.invMen} mēn. = ${eur(c.inv)} mēnesī`,
   fullA:c=>eur(c.fullA)+' / h', fullS:c=>eur(c.fullS)+' / h',
@@ -1160,7 +1167,7 @@ const inp=(p,o={})=>{ const v=getP(p); const t=o.t||'';
 const fld=(label,html,hint)=>`<div class="field"><span class="label">${label}</span>${html}${hint?`<div class="hint">${hint}</div>`:''}</div>`;
 const sw=(p,on)=>`<label class="sw"><input type="checkbox" data-p="${p}" ${on?'checked':''} onchange="onIn(this,true)"><i></i></label>`;
 function srcOptions(sel, manualLabel){
-  const o=[['',manualLabel||'Ievadīt manuāli'],['iek','Koplietošanas iekštelpas kopā'],['cieti','Cietie segumi kopā'],['zale','Zālāji kopā'],['ter','Teritorija kopā'],['logi','Logi (aprēķins)'],['atkr','Atkritumu laukums']];
+  const o=[['',manualLabel||'Ievadīt manuāli'],['iek','Koplietošanas iekštelpas kopā'],['cieti','Cietie segumi kopā'],['zale','Zālāji kopā'],['ter','Teritorija kopā'],['logi','Logi (aprēķins)'],['atkr','Atkritumu laukums'],['gar','Garāža / pazemes stāvvieta kopā']];
   S.d.telpas.forEach(z=>o.push(['z:'+z.id,'Zona: '+(z.nosaukums||'—')]));
   return o.map(a=>`<option value="${a[0]}" ${a[0]===(sel||'')?'selected':''}>${esc(a[1])}</option>`).join('');
 }
@@ -1183,28 +1190,30 @@ const PANES={
       ${fld('Nosaukums',inp(o+'nosaukums',{ph:'piem. Hipokrāta 24A (53 dzīvokļi)'}))}
       ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga'}))}
       <div class="g2">${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas'}))}${fld('Izpildītājs',inp(o+'izpilditajs'))}</div><div class="gap"></div>
-      <div class="g2">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Derīgs līdz',inp(o+'derigs',{type:'date'}))}</div><div class="gap"></div>
-      <div class="g2">${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Lietderīgā platība, m²',inp(o+'lietderiga',{t:'n'}),'dzīvokļi bez balkoniem')}</div><div class="gap"></div>
+      <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}))}</div>
+      <div class="hint" style="margin:-8px 0 16px">Dzīvokļu m² — lietderīgā platība bez balkoniem; no tās rēķina <b>uzk. izd. = € / m²</b>.</div>
       ${fld('Piezīmes <span class="opt">· nav obligāti</span>',`<textarea class="textarea" data-p="objekts.piezimes" oninput="onIn(this)">${esc(S.d.objekts.piezimes||'')}</textarea>`)}
       ${S.ro?'':`<button class="btn btn-primary btn-block" onclick="setSec('platibas')">Tālāk: platības</button>`}</div>`;
   },
   platibas(c){
-    const row=(z,i)=>`<div class="jrow"><div class="jrow-h"><b><i>${i+1}</i>${z.tips==='iek'?'Iekštelpa':'Teritorija'}</b><button class="jdel" onclick="delRow('telpas',${i})">Dzēst</button></div>
+    const row=(z,i)=>`<div class="jrow"><div class="jrow-h"><b><i>${i+1}</i>${z.tips==='iek'?'Iekštelpa':z.tips==='gar'?'Garāža':'Teritorija'}</b><button class="jdel" onclick="delRow('telpas',${i})">Dzēst</button></div>
       ${fld('Zonas nosaukums',inp(`telpas.${i}.nosaukums`,{ph:'piem. Kāpņu telpas',ch:1}))}
       <div class="g2"><div class="field"><span class="label">Tips</span><select class="select" onchange="setTips(${i},this.value)">
         <option value="iek" ${z.tips==='iek'?'selected':''}>Koplietošanas iekštelpa</option>
         <option value="cieti" ${z.tips==='cieti'?'selected':''}>Teritorija — cietie segumi</option>
-        <option value="zale" ${z.tips==='zale'?'selected':''}>Teritorija — zālāji</option></select></div>
+        <option value="zale" ${z.tips==='zale'?'selected':''}>Teritorija — zālāji</option>
+        <option value="gar" ${z.tips==='gar'?'selected':''}>Garāža / pazemes stāvvieta</option></select></div>
         ${fld('Platība, m²',inp(`telpas.${i}.m2`,{t:'n'}))}</div></div>`;
-    const grp=t=>S.d.telpas.map((z,i)=>(t==='iek'?z.tips==='iek':z.tips!=='iek')?row(z,i):'').join('');
+    const grp=t=>S.d.telpas.map((z,i)=>(t==='ter'?(z.tips==='cieti'||z.tips==='zale'):z.tips===t)?row(z,i):'').join('');
     return vh('Platības','Koplietošanas telpas un teritorija — no tām rēķinās darbi.')+(S.ro?'':`<div class="card panel" style="margin-bottom:12px">${aiBtn()}</div>`)+
       `<div class="section-t">Koplietošanas iekštelpas <span data-o="iek">${OUT.iek(c)}</span></div>${grp('iek')}
       <div class="section-t">Teritorija <span data-o="ter">${OUT.ter(c)}</span></div>${grp('ter')}
+      <div class="section-t">Garāža / pazemes stāvvieta <span data-o="gar">${OUT.gar(c)}</span></div>${grp('gar')}
       <button class="more-btn" onclick="addRow('telpas')">${IC.plus.replace('<svg','<svg width="18" height="18"')}Vēl viena zona</button>
       <div class="card panel"><div class="g3">
         ${fld('Logu daļa, %',inp('param.logiDala',{t:'pct'}),'Logi = <b data-o="logi">'+OUT.logi(c)+'</b>')}
         ${fld('Atkritumu laukums, m²',inp('param.atkritumi',{t:'n'}))}
-        ${fld('Pazemes stāvvieta, m²',inp('param.stavvieta',{t:'n'}))}</div></div>`;
+        ${fld('Dzīvokļu m²',inp('objekts.lietderiga',{t:'n'}),'€ / m² rādītājam')}</div></div>`;
   },
   darbi(c){
     const it=(w,i,n)=>`<div class="jrow ${w.on?'':'off'}"><div class="jrow-h"><b><i>${n}</i>${esc(w.izp)}</b>${sw(`darbi.${i}.on`,w.on)}<button class="jdel" onclick="delRow('darbi',${i})">Dzēst</button></div>
@@ -1260,12 +1269,13 @@ const PANES={
         <div class="kv"><span>Cena mēnesī bez PVN</span><b>${eur(c.bezPVN)}</b></div>
         <div class="kv"><span>Cena gadā ar PVN</span><b>${eur(c.arPVN*12)}</b></div>
         <div class="kv"><span>Stundas mēnesī (apkopēja / sētnieks)</span><b>${nfmt(c.hA,1)} / ${nfmt(c.hS,1)} h</b></div>
-        ${pnum(o.lietderiga)?`<div class="kv"><span>€ / m² lietderīgās platības mēnesī</span><b>${eur(c.arPVN/pnum(o.lietderiga))}</b></div>`:''}
+        <div class="kv"><span>Uzk. izd. = € / dzīvokļu m² mēnesī ar PVN</span><b>${c.perM2==null?'— (ievadiet dzīvokļu m²)':eur4(c.perM2)}</b></div>
+        ${c.perM2bez!=null?`<div class="kv"><span>€ / dzīvokļu m² bez PVN</span><b>${eur4(c.perM2bez)}</b></div>`:''}
       </div><div class="gap"></div>
       <div class="card panel"><div class="rwrap"><table class="rtable"><tr><th></th><th>Pozīcija</th><th>Mēnesī</th><th>Gadā</th><th>Daļa</th></tr>
         ${c.lines.map(l=>`<tr class="${l.total?'grand':(l.bold?'tot':'')}"><td class="nr">${l.nr}</td><td>${esc(l.name)}</td><td>${eur(l.men)}</td><td>${eur(l.gada)}</td><td>${l.dala==null?'':pct(l.dala)}</td></tr>`).join('')}
       </table></div></div><div class="gap"></div>
-      <div class="card panel">${[['Nosaukums',o.nosaukums],['Adrese',o.adrese],['Pasūtītājs',o.pasutitajs],['Izpildītājs',o.izpilditajs],['Sagatavots',lvDate(o.sagatavots)],['Derīgs līdz',lvDate(o.derigs)]].map(a=>`<div class="kv"><span>${a[0]}</span><b>${esc(a[1]||'—')}</b></div>`).join('')}</div>
+      <div class="card panel">${[['Nosaukums',o.nosaukums],['Adrese',o.adrese],['Pasūtītājs',o.pasutitajs],['Izpildītājs',o.izpilditajs],['Sagatavots',lvDate(o.sagatavots)],['Dzīvokļi',o.dzivokli],['Dzīvokļu m²',o.lietderiga?nfmt(o.lietderiga):'']].map(a=>`<div class="kv"><span>${a[0]}</span><b>${esc(a[1]||'—')}</b></div>`).join('')}</div>
       <div class="gap"></div><div class="btn-row"><button class="btn btn-glass" onclick="exp('pdf')">${IC.pdf} PDF</button><button class="btn btn-glass" onclick="exp('xlsx')">${IC.xls} Excel</button></div>`;
   }
 };
@@ -1297,6 +1307,7 @@ function aiApply(a){
   (a.citas_zonas||[]).forEach(x=>{ const v=num(x&&x.m2); if(v){ d.telpas.push({id:uid(),nosaukums:String(x.nosaukums||'Cita telpa'),tips:'iek',m2:v}); zn++; } });
   const T=a.teritorija||{};
   [['cieti',num(T.cieti)],['zale',num(T.zale)]].forEach(([tp,v])=>{ if(v==null) return; let z=d.telpas.find(t=>t.tips===tp); if(!z){ z={id:uid(),nosaukums:tp==='cieti'?'Cietie segumi':'Zālāji, apstādījumi',tips:tp,m2:0}; d.telpas.push(z); } z.m2=v; zn++; });
+  { const g=num(a.garaza); if(g){ let z=d.telpas.find(t=>t.tips==='gar'); if(!z){ z={id:uid(),nosaukums:'Garāža / pazemes stāvvieta',tips:'gar',m2:0}; d.telpas.push(z); } z.m2=g; zn++; } }
   if(zn) done.push(zn+' '+plural(zn,'platības zona','platības zonas'));
   // darbi ar manuālu platību
   const zv=re=>d.telpas.filter(t=>t.tips==='iek'&&re.test(t.nosaukums)).reduce((s,t)=>s+pnum(t.m2),0);

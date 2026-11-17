@@ -20,7 +20,7 @@ const SHEETS = { USERS: 'Lietotāji', BUD: 'Budžeti', VER: 'Versijas', LOG: 'Ž
 const USER_HEAD = ['Vārds', 'PIN', 'Loma', 'Aktīvs'];
 const BUD_HEAD = ['ID', 'Nosaukums', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Sagatavots', 'Derīgs līdz',
   'Autors', 'Statuss', 'Cena bez PVN', 'Cena ar PVN', 'Versija', 'Izveidots', 'Atjaunots',
-  'Vadības komentārs', 'Izskatīja', 'Dati'];
+  'Vadības komentārs', 'Izskatīja', 'Dati', 'Dzīvokļu m²'];
 const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena ar PVN', 'Piezīme', 'Dati'];
 const LOG_HEAD = ['Laiks', 'Lietotājs', 'Darbība', 'Budžets', 'Info'];
 const STATUSES = ['Melnraksts', 'Iesniegts', 'Apstiprināts', 'Noraidīts', 'Arhivēts'];
@@ -143,7 +143,8 @@ function rowToMeta_(r) {
     autors: o['Autors'], statuss: o['Statuss'], bezPVN: Number(o['Cena bez PVN']) || 0,
     arPVN: Number(o['Cena ar PVN']) || 0, versija: Number(o['Versija']) || 1,
     izveidots: o['Izveidots'], atjaunots: o['Atjaunots'], komentars: o['Vadības komentārs'],
-    izskatija: o['Izskatīja']
+    izskatija: o['Izskatīja'], plat: Number(o['Dzīvokļu m²']) || 0,
+    perM2: (Number(o['Dzīvokļu m²']) > 0) ? round2_(Number(o['Cena ar PVN']) / Number(o['Dzīvokļu m²']) * 100) / 100 : null
   };
 }
 function findRow_(id) {
@@ -209,8 +210,8 @@ function saveBudget_(u, payload) {
     }
     const json = JSON.stringify(d);
     const values = [id, o.nosaukums || '', o.adrese || '', o.pasutitajs || '', o.izpilditajs || '',
-      o.sagatavots || '', o.derigs || '', autors, status, round2_(c.bezPVN), round2_(c.arPVN), version,
-      created, ts, koment, izsk, json];
+      o.sagatavots || '', '', autors, status, round2_(c.bezPVN), round2_(c.arPVN), version,
+      created, ts, koment, izsk, json, Number(o.lietderiga) || ''];
     if (row) sh.getRange(row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
     sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.arPVN), payload.piezime || '', json]);
@@ -315,9 +316,9 @@ function exportListXlsx_(u, ids) {
   try {
     const sh = ss.getSheets()[0].setName('Budžeti');
     const head = ['ID', 'Objekts', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Autors', 'Statuss', 'Sagatavots',
-      'Derīgs līdz', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā ar PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
+      'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā ar PVN', '€ / m² mēn. ar PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
     const rows = list.map(m => [m.id, m.nosaukums, m.adrese, m.pasutitajs, m.izpilditajs, m.autors, m.statuss,
-      m.sagatavots, m.derigs, m.bezPVN, m.arPVN, round2_(m.arPVN * 12), m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
+      m.sagatavots, m.plat || '', m.bezPVN, m.arPVN, round2_(m.arPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
     sh.getRange(1, 1, 1, head.length).setValues([head]);
     if (rows.length) sh.getRange(2, 1, rows.length, head.length).setValues(rows);
     styleHeader_(sh.getRange(1, 1, 1, head.length));
@@ -325,6 +326,7 @@ function exportListXlsx_(u, ids) {
       sh.getRange(2, 10, rows.length, 3).setNumberFormat('#,##0.00 "€"');
       const t = rows.length + 2;
       sh.getRange(t, 9).setValue('Kopā').setFontWeight('bold');
+      sh.getRange(2, 13, rows.length, 1).setNumberFormat('0.0000 "€"');
       sh.getRange(t, 10, 1, 3).setFormulas([[`=SUM(J2:J${t - 1})`, `=SUM(K2:K${t - 1})`, `=SUM(L2:L${t - 1})`]])
         .setNumberFormat('#,##0.00 "€"').setFontWeight('bold');
     }
@@ -375,12 +377,13 @@ function buildWorkbook_(ss, d, c, meta) {
   t.getRange('A1').setValue('Sanitārās apkopes tāme').setFontSize(16).setFontWeight('bold').setFontColor('#0f6b5c');
   t.getRange('A2').setValue('Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».').setFontColor('#777777');
   const obj = [['Nosaukums', o.nosaukums || ''], ['Adrese', o.adrese || ''], ['Pasūtītājs', o.pasutitajs || ''],
-    ['Sagatavots', lvDate_(o.sagatavots)], ['Derīgs līdz', lvDate_(o.derigs)], ['Izpildītājs', o.izpilditajs || ''],
+    ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs || ''], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '') + ' / ' + (o.lietderiga || '')],
     ['Budžeta ID', meta.id || ''], ['Autors', meta.autors || ''], ['Statuss', meta.statuss || '']];
   t.getRange(4, 1, obj.length, 2).setValues(obj);
   t.getRange(4, 1, obj.length, 1).setFontColor('#777777');
-  t.getRange(4, 4, 2, 2).setValues([['Cena mēnesī ar PVN', c.arPVN], ['Cena mēnesī bez PVN', c.bezPVN]]).setFontWeight('bold');
+  t.getRange(4, 4, 3, 2).setValues([['Cena mēnesī ar PVN', c.arPVN], ['Cena mēnesī bez PVN', c.bezPVN], ['Uzk. izd. = € / dzīvokļu m² (ar PVN)', c.perM2 == null ? '' : c.perM2]]).setFontWeight('bold');
   t.getRange(4, 5, 2, 1).setNumberFormat(EUR);
+  t.getRange(6, 5).setNumberFormat('0.0000 "€"');
   let r = 15;
   t.getRange(r, 1, 1, 5).setValues([['Nr.', 'Pozīcija (MK 408 — 1.1. Sanitārā apkope)', 'Mēnesī', 'Gadā', 'Daļa']]);
   styleHeader_(t.getRange(r, 1, 1, 5));
@@ -397,7 +400,7 @@ function buildWorkbook_(ss, d, c, meta) {
   // Platības
   const p = ss.insertSheet('Platības');
   const pr = [['Zona', 'Tips', 'Platība, m²']];
-  (d.telpas || []).forEach(z => pr.push([z.nosaukums, z.tips === 'iek' ? 'Koplietošanas iekštelpas' : (z.tips === 'cieti' ? 'Teritorija — cietie segumi' : 'Teritorija — zālāji / apstādījumi'), Number(z.m2) || 0]));
+  (d.telpas || []).forEach(z => pr.push([z.nosaukums, z.tips === 'iek' ? 'Koplietošanas iekštelpas' : (z.tips === 'cieti' ? 'Teritorija — cietie segumi' : z.tips === 'gar' ? 'Garāža / pazemes stāvvieta' : 'Teritorija — zālāji / apstādījumi'), Number(z.m2) || 0]));
   pr.push(['Koplietošanas iekštelpas kopā', '', c.areas.iek], ['Teritorija kopā', '', c.areas.ter], ['Logi (aprēķins)', '', c.areas.logi]);
   p.getRange(1, 1, pr.length, 3).setValues(pr); styleHeader_(p.getRange(1, 1, 1, 3));
   p.getRange(pr.length - 2, 1, 3, 3).setFontWeight('bold');
@@ -442,7 +445,7 @@ function buildWorkbook_(ss, d, c, meta) {
     ['Atvaļinājuma rezerve', P.atv], ['Darba devēja VSAOI', P.vsaoi],
     ['Pilnā stundas cena — apkopēja', c.fullA], ['Pilnā stundas cena — sētnieks', c.fullS],
     ['Neproduktīvais laiks', P.neprod], ['Logu daļa no iekštelpām', P.logiDala],
-    ['Atkritumu konteineru laukums, m²', P.atkritumi], ['Pazemes stāvvieta, m²', P.stavvieta],
+    ['Atkritumu konteineru laukums, m²', P.atkritumi],
     ['Materiāli — iekštelpas, € / m² mēn.', P.matIek], ['Materiāli — teritorija, € / m² mēn.', P.matTer],
     ['Inventāra nolietojums, mēn.', P.invMen], ['Transports un sakari, € / mēn.', P.transports],
     ['Netiešās izmaksas', P.netiesas], ['Neparedzētie izdevumi', P.nepar], ['Peļņa', P.pelna], ['PVN', P.pvn]];
@@ -474,7 +477,7 @@ function pdfHtml_(d, c, meta) {
   .pb{page-break-before:always}
   .foot{margin-top:18px;color:#999;font-size:7.5pt}`;
   const objRows = [['Nosaukums', o.nosaukums], ['Adrese', o.adrese], ['Pasūtītājs', o.pasutitajs],
-    ['Sagatavots', lvDate_(o.sagatavots)], ['Derīgs līdz', lvDate_(o.derigs)], ['Izpildītājs', o.izpilditajs]]
+    ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '—') + ' / ' + (o.lietderiga ? num_(o.lietderiga, 1) : '—')]]
     .map(r => `<tr><td class="muted">${esc_(r[0])}</td><td class="v">${esc_(r[1] || '')}</td></tr>`).join('');
   const lines = (c.lines || []).map(l => `<tr class="${l.total ? 'grand' : (l.bold ? 'tot' : '')}">
       <td class="muted">${esc_(l.nr || '')}</td><td>${esc_(l.name)}</td>
@@ -497,7 +500,8 @@ function pdfHtml_(d, c, meta) {
     <table class="res"><tr><th colspan="2">Rezultāts</th></tr>
     <tr><td>Cena mēnesī ar PVN</td><td class="r big">${eur_(c.arPVN)}</td></tr>
     <tr><td class="muted">Cena mēnesī bez PVN</td><td class="r"><b>${eur_(c.bezPVN)}</b></td></tr>
-    <tr><td class="muted">Cena gadā ar PVN</td><td class="r">${eur_(c.arPVN * 12)}</td></tr></table>
+    <tr><td class="muted">Cena gadā ar PVN</td><td class="r">${eur_(c.arPVN * 12)}</td></tr>
+    <tr><td class="muted">Uzk. izd. = € / dzīvokļu m²</td><td class="r"><b>${c.perM2 == null ? '—' : '€' + num_(c.perM2, 4)}</b></td></tr></table>
   </td></tr></table>
   <h2>Tāme</h2>
   <table><tr><th>Nr.</th><th>Pozīcija (MK 408 — 1.1. Sanitārā apkope)</th><th class="r">Mēnesī</th><th class="r">Gadā</th><th class="r">Daļa</th></tr>${lines}</table>
@@ -560,12 +564,12 @@ function aiKadastrs_(u, text) {
     ' "stavi":<virszemes stāvu skaits>,"lifti":<liftu skaits>,"zemes_platiba":<zemes vienības platība m2>,"apbuves_laukums":<būves apbūves laukums m2>,',
     ' "zonas":{"kapnu":<kāpņu telpas, gaiteņi, vestibils m2>,"ratinu":<ratiņu/velosipēdu telpa m2>,"tehniskas":<tehniskās telpas + apsaimniekotāja telpa m2>,"atputas":<koplietošanas atpūtas telpa/sanmezgls m2>,"terase":<koplietošanas terase m2>},',
     ' "citas_zonas":[{"nosaukums":"<cita koplietošanas iekštelpa>","m2":<m2>}],',
-    ' "teritorija":{"cieti":<cietie segumi m2>,"zale":<zālāji, apstādījumi m2>},',
+    ' "teritorija":{"cieti":<cietie segumi m2>,"zale":<zālāji, apstādījumi m2>},"garaza":<pazemes autostāvvieta / garāža m2, ja ir>,',
     ' "piezimes":"<īsi latviski: no kurienes ņemti skaitļi, kas ir aplēse>"}',
     'Noteikumi:',
     '- Koplietošanas telpas ņem no telpu grupām ar lietošanas veidu, kas satur "koplietošanas", "kāpņu telpa", "gaitenis", "vestibils", "tehniskā", "katlu", "siltummezgls", "elektro" u.tml. Pagrabu/noliktavu nodalījumus, kas pieder dzīvokļiem, neskaiti.',
     '- Ja ir tikai kopējā koplietošanas platība bez sadalījuma, liec to "kapnu".',
-    '- Pazemes autostāvvietu NEliec zonās; pieraksti to piezīmēs.',
+    '- Pazemes autostāvvietu / garāžu NEliec zonās, bet laukā "garaza".',
     '- Teritorija = zemes vienības platība − apbūves laukums. Ja seguma sadalījums nav zināms, aplēs: cietie segumi 40%, zālāji 60%, un piezīmēs to norādi.',
     '- Dzīvokļu skaits = telpu grupu skaits ar lietošanas veidu "dzīvoklis" (vai norādītais dzīvokļu skaits).'
   ].join('\n');
