@@ -1,10 +1,13 @@
 /**
+ * SH | Budžets — © VAITKEVIX, SIA. Visas tiesības aizsargātas.
  * SH | Budžets — uzkopšanas (sanitārās apkopes) tāmju lietotne
- * Google Sheet + Apps Script web app. Struktūra atbilst MK noteikumu Nr. 408
+ * Google Sheet + Apps Script API. Struktūra atbilst MK noteikumu Nr. 408
  * tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».
  *
+ * Saskarne: https://vaitkevix.github.io/budzets/ (GitHub) — šis skripts ir tās API (doPost).
+ *
  * Lapas:
- *   Lietotāji  — Vārds | PIN | Loma (admin / gatavotājs / vadība) | Aktīvs (jā/nē)
+ *   Lietotāji  — Vārds | PIN (unikāls) | Loma (admin / gatavotājs / vadība) | Aktīvs (jā/nē)
  *   Budžeti    — viena rinda katram budžetam (pēdējā versija)
  *   Versijas   — katra saglabāšana (pilna vēsture)
  *   Žurnāls    — darbību žurnāls
@@ -21,17 +24,43 @@ const BUD_HEAD = ['ID', 'Nosaukums', 'Adrese', 'Pasūtītājs', 'Izpildītājs',
 const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena ar PVN', 'Piezīme', 'Dati'];
 const LOG_HEAD = ['Laiks', 'Lietotājs', 'Darbība', 'Budžets', 'Info'];
 const STATUSES = ['Melnraksts', 'Iesniegts', 'Apstiprināts', 'Noraidīts', 'Arhivēts'];
-const TOKEN_DAYS = 30;
 const TZ = 'Europe/Riga';
 
 /* ---------------- Web app ---------------- */
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle(APP_NAME)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return ContentService.createTextOutput(APP_NAME + ' API — lietotne: https://vaitkevix.github.io/budzets/');
 }
+
+function doPost(e) {
+  let req;
+  try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ ok: false, error: 'Nederīgs pieprasījums' }); }
+  try {
+    const user = auth_(req.pin);
+    if (!user) return json_({ ok: false, error: 'Nepareizs PIN' });
+    const fn = ACTIONS[req.action];
+    if (!fn) return json_({ ok: false, error: 'Nezināma darbība' });
+    return json_(Object.assign({ ok: true }, fn(user, req) || {}));
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message || err) });
+  }
+}
+
+const ACTIONS = {
+  login: (u) => { log_(u.name, 'Pieteicās'); return { user: u }; },
+  list: (u) => ({ items: listBudgets_(u) }),
+  get: (u, r) => r.versija ? getVersion_(u, r.id, r.versija) : getBudget_(u, r.id),
+  save: (u, r) => saveBudget_(u, r),
+  status: (u, r) => ({ done: setStatus_(u, r.id, r.statuss, r.komentars) }),
+  del: (u, r) => ({ done: deleteBudget_(u, r.id) }),
+  versions: (u, r) => ({ items: getVersions_(u, r.id) }),
+  pdf: (u, r) => ({ file: exportPdf_(u, r.id, r.data, r.calc, r.meta) }),
+  xlsx: (u, r) => ({ file: exportXlsx_(u, r.id, r.data, r.calc, r.meta) }),
+  listXlsx: (u, r) => ({ file: exportListXlsx_(u, r.ids) }),
+  aiKadastrs: (u, r) => ({ ai: aiKadastrs_(u, r.text) })
+};
+
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 /* ---------------- Uzstādīšana ---------------- */
 
@@ -42,7 +71,7 @@ function setup() {
     if (!sh) sh = ss.insertSheet(name);
     if (sh.getLastRow() === 0) {
       sh.getRange(1, 1, 1, head.length).setValues([head])
-        .setFontWeight('bold').setBackground('#5B2E91').setFontColor('#ffffff');
+        .setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff');
       sh.setFrozenRows(1);
     }
     (widths || []).forEach((w, i) => sh.setColumnWidth(i + 1, w));
@@ -91,19 +120,12 @@ function users_() {
     .map(r => ({ name: String(r[0]).trim(), pin: String(r[1]).trim(), role: norm_(r[2]) || 'gatavotājs' }));
 }
 
-function auth_(token) {
-  if (!token) throw new Error('AUTH');
-  const raw = PropertiesService.getScriptProperties().getProperty('tok_' + token);
-  if (!raw) throw new Error('AUTH');
-  const t = JSON.parse(raw);
-  if (Date.now() > t.exp) {
-    PropertiesService.getScriptProperties().deleteProperty('tok_' + token);
-    throw new Error('AUTH');
-  }
-  // lomu pārbaudām no lapas katru reizi (ja admins nomaina lomu vai deaktivizē)
-  const u = users_().find(x => norm_(x.name) === norm_(t.name));
-  if (!u) throw new Error('AUTH');
-  return { name: u.name, role: u.role };
+/** Lietotājs pēc PIN (PIN jābūt unikālam) */
+function auth_(pin) {
+  pin = String(pin || '').trim();
+  if (!pin) return null;
+  const u = users_().find(x => x.pin === pin);
+  return u ? { name: u.name, role: u.role } : null;
 }
 
 function budRows_() {
@@ -131,50 +153,15 @@ function findRow_(id) {
 }
 function canSee_(u, meta) { return isMgmt_(u) || norm_(meta.autors) === norm_(u.name); }
 
-/* ---------------- Pieteikšanās ---------------- */
-
-function getLoginNames() {
-  return users_().map(u => ({ name: u.name, role: u.role }));
-}
-
-function login(name, pin) {
-  const u = users_().find(x => norm_(x.name) === norm_(name));
-  if (!u || String(pin).trim() !== u.pin) throw new Error('Nepareizs vārds vai PIN.');
-  const token = Utilities.getUuid().replace(/-/g, '');
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('tok_' + token, JSON.stringify({ name: u.name, exp: Date.now() + TOKEN_DAYS * 864e5 }));
-  cleanupTokens_();
-  log_(u.name, 'Pieteicās');
-  return { token: token, name: u.name, role: u.role };
-}
-
-function whoami(token) { return auth_(token); }
-
-function logout(token) {
-  if (token) PropertiesService.getScriptProperties().deleteProperty('tok_' + token);
-  return true;
-}
-
-function cleanupTokens_() {
-  const props = PropertiesService.getScriptProperties();
-  const all = props.getProperties();
-  Object.keys(all).forEach(k => {
-    if (k.indexOf('tok_') !== 0) return;
-    try { if (Date.now() > JSON.parse(all[k]).exp) props.deleteProperty(k); } catch (e) { props.deleteProperty(k); }
-  });
-}
-
 /* ---------------- Budžeti ---------------- */
 
-function listBudgets(token) {
-  const u = auth_(token);
+function listBudgets_(u) {
   const list = budRows_().filter(r => r[0]).map(rowToMeta_).filter(m => canSee_(u, m));
   list.sort((a, b) => String(b.atjaunots).localeCompare(String(a.atjaunots)));
-  return { user: u, items: list };
+  return list;
 }
 
-function getBudget(token, id) {
-  const u = auth_(token);
+function getBudget_(u, id) {
   const f = findRow_(id);
   if (!f) throw new Error('Budžets nav atrasts.');
   const meta = rowToMeta_(f.row);
@@ -196,8 +183,7 @@ function nextId_() {
  * payload = { id?, data, calc, statuss?, piezime? }
  * data — visa forma; calc — klienta aprēķins (summas)
  */
-function saveBudget(token, payload) {
-  const u = auth_(token);
+function saveBudget_(u, payload) {
   if (!isMaker_(u)) throw new Error('Vadības profils budžetus nelabo — tikai skatās un apstiprina.');
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -235,8 +221,7 @@ function saveBudget(token, payload) {
   }
 }
 
-function setStatus(token, id, status, comment) {
-  const u = auth_(token);
+function setStatus_(u, id, status, comment) {
   if (STATUSES.indexOf(status) < 0) throw new Error('Nezināms statuss.');
   const f = findRow_(id);
   if (!f) throw new Error('Budžets nav atrasts.');
@@ -257,8 +242,7 @@ function setStatus(token, id, status, comment) {
   return true;
 }
 
-function deleteBudget(token, id) {
-  const u = auth_(token);
+function deleteBudget_(u, id) {
   const f = findRow_(id);
   if (!f) throw new Error('Budžets nav atrasts.');
   const meta = rowToMeta_(f.row);
@@ -269,8 +253,7 @@ function deleteBudget(token, id) {
   return true;
 }
 
-function getVersions(token, id) {
-  const u = auth_(token);
+function getVersions_(u, id) {
   const f = findRow_(id);
   if (!f) throw new Error('Budžets nav atrasts.');
   if (!canSee_(u, rowToMeta_(f.row))) throw new Error('Nav piekļuves.');
@@ -282,8 +265,7 @@ function getVersions(token, id) {
   })).reverse();
 }
 
-function getVersion(token, id, versija) {
-  const u = auth_(token);
+function getVersion_(u, id, versija) {
   const f = findRow_(id);
   if (!f) throw new Error('Budžets nav atrasts.');
   const meta = rowToMeta_(f.row);
@@ -300,8 +282,7 @@ function getVersion(token, id, versija) {
 /* ---------------- Eksports ---------------- */
 
 /** PDF: klients atsūta jau aprēķināto tāmi (calc), lai PDF 1:1 sakrīt ar ekrānā redzamo. */
-function exportPdf(token, id, data, calc, meta) {
-  const u = auth_(token);
+function exportPdf_(u, id, data, calc, meta) {
   if (id) { const f = findRow_(id); if (f && !canSee_(u, rowToMeta_(f.row))) throw new Error('Nav piekļuves.'); }
   const html = pdfHtml_(data, calc, meta || {});
   const blob = Utilities.newBlob(html, 'text/html', 'tame.html').getAs('application/pdf');
@@ -310,8 +291,7 @@ function exportPdf(token, id, data, calc, meta) {
   return { name: name, mime: 'application/pdf', b64: Utilities.base64Encode(blob.getBytes()) };
 }
 
-function exportXlsx(token, id, data, calc, meta) {
-  const u = auth_(token);
+function exportXlsx_(u, id, data, calc, meta) {
   if (id) { const f = findRow_(id); if (f && !canSee_(u, rowToMeta_(f.row))) throw new Error('Nav piekļuves.'); }
   const name = fileName_(data, meta);
   const ss = SpreadsheetApp.create(name);
@@ -327,8 +307,7 @@ function exportXlsx(token, id, data, calc, meta) {
 }
 
 /** Vadībai — visu (atfiltrēto) budžetu saraksts Excel failā */
-function exportListXlsx(token, ids) {
-  const u = auth_(token);
+function exportListXlsx_(u, ids) {
   const all = budRows_().filter(r => r[0]).map(rowToMeta_).filter(m => canSee_(u, m));
   const list = ids && ids.length ? all.filter(m => ids.indexOf(m.id) >= 0) : all;
   const name = 'Budžetu saraksts ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
@@ -384,7 +363,7 @@ function esc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ 
 function lvDate_(iso) { if (!iso) return ''; const p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso; }
 
 function styleHeader_(rng) {
-  rng.setBackground('#5B2E91').setFontColor('#ffffff').setFontWeight('bold');
+  rng.setBackground('#0f6b5c').setFontColor('#ffffff').setFontWeight('bold');
 }
 
 /* ---- Excel darbgrāmata (vērtības no aprēķina) ---- */
@@ -393,7 +372,7 @@ function buildWorkbook_(ss, d, c, meta) {
   const EUR = '#,##0.00 "€"';
   // Tāme
   const t = ss.getSheets()[0].setName('Tāme');
-  t.getRange('A1').setValue('Sanitārās apkopes tāme').setFontSize(16).setFontWeight('bold').setFontColor('#5B2E91');
+  t.getRange('A1').setValue('Sanitārās apkopes tāme').setFontSize(16).setFontWeight('bold').setFontColor('#0f6b5c');
   t.getRange('A2').setValue('Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».').setFontColor('#777777');
   const obj = [['Nosaukums', o.nosaukums || ''], ['Adrese', o.adrese || ''], ['Pasūtītājs', o.pasutitajs || ''],
     ['Sagatavots', lvDate_(o.sagatavots)], ['Derīgs līdz', lvDate_(o.derigs)], ['Izpildītājs', o.izpilditajs || ''],
@@ -410,7 +389,7 @@ function buildWorkbook_(ss, d, c, meta) {
   t.getRange(r + 1, 3, lines.length, 2).setNumberFormat(EUR);
   t.getRange(r + 1, 5, lines.length, 1).setNumberFormat('0.0%');
   (c.lines || []).forEach((l, i) => {
-    if (l.bold) t.getRange(r + 1 + i, 1, 1, 5).setFontWeight('bold').setBackground(l.total ? '#3D1E66' : '#EFE9F7')
+    if (l.bold) t.getRange(r + 1 + i, 1, 1, 5).setFontWeight('bold').setBackground(l.total ? '#094a40' : '#e3efeb')
       .setFontColor(l.total ? '#ffffff' : '#222222');
   });
   t.setColumnWidth(1, 110); t.setColumnWidth(2, 340); t.setColumnWidths(3, 3, 120); t.setColumnWidth(4, 160);
@@ -476,7 +455,7 @@ function buildWorkbook_(ss, d, c, meta) {
 /* ---- PDF HTML ---- */
 function pdfHtml_(d, c, meta) {
   const o = d.objekts || {};
-  const purple = '#5B2E91', dark = '#3D1E66', lav = '#EFE9F7', cream = '#FFF6DD';
+  const purple = '#0f6b5c', dark = '#094a40', lav = '#e3efeb', cream = '#f3f6f4';
   const css = `
   body{font-family:Arial,Helvetica,sans-serif;color:#222;font-size:10pt;margin:0}
   h1{color:${purple};font-size:20pt;margin:0 0 2px}
@@ -535,4 +514,66 @@ function pdfHtml_(d, c, meta) {
   <table><tr><th>Grupa</th><th>Pozīcija</th><th>Apraksts</th><th class="r">Cena</th></tr>${invRows}
   <tr class="tot"><td colspan="3">Kopā (nolietojums ${d.param.invMen} mēn. → ${eur_(c.inv)} mēnesī)</td><td class="r">${eur_(c.invTotal)}</td></tr></table>
   </body></html>`;
+}
+
+
+/* ---------------- AI: kadastra dati → forma ---------------- */
+
+function aiCall_(system, prompt, maxTokens) {
+  const props = PropertiesService.getScriptProperties();
+  const model = props.getProperty('AI_MODEL');
+  const claudeKey = props.getProperty('ANTHROPIC_API_KEY');
+  const geminiKey = props.getProperty('GEMINI_API_KEY');
+  if (claudeKey) {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({ model: model || 'claude-haiku-5-5', max_tokens: maxTokens, system: system, messages: [{ role: 'user', content: prompt }] })
+    });
+    const j = JSON.parse(res.getContentText());
+    if (res.getResponseCode() !== 200) throw new Error('AI kļūda: ' + (j.error && j.error.message || res.getResponseCode()));
+    return (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  }
+  if (geminiKey) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + (model || 'gemini-2.5-flash') + ':generateContent?key=' + encodeURIComponent(geminiKey);
+    const res = UrlFetchApp.fetch(url, {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens } })
+    });
+    const j = JSON.parse(res.getContentText());
+    if (res.getResponseCode() !== 200) throw new Error('AI kļūda: ' + (j.error && j.error.message || res.getResponseCode()));
+    return (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || '').join('');
+  }
+  throw new Error('AI nav iestatīts — Apps Script → Project Settings → Script properties: ANTHROPIC_API_KEY');
+}
+
+function aiKadastrs_(u, text) {
+  text = String(text || '').trim();
+  if (text.length < 20) throw new Error('Ielīmē kadastra datus (vismaz dažas rindas).');
+  if (text.length > 30000) text = text.slice(0, 30000);
+  const system = [
+    'Tu esi asistents, kas no Latvijas Kadastra (kadastrs.lv / VZD) izkopētiem būves un zemes datiem aizpilda uzkopšanas tāmes formu.',
+    'Atbildi TIKAI ar vienu JSON objektu, bez paskaidrojumiem un bez ``` zīmēm. Nezināmām vērtībām liec null. Skaitļi — bez mērvienībām, decimāldaļa ar punktu.',
+    'Shēma:',
+    '{"nosaukums":"<īsa adrese> (<N> dzīvokļi)","adrese":"<pilna adrese>","dzivokli":<dzīvokļu skaits>,"lietderiga":<dzīvokļu telpu grupu kopplatība m2 bez balkoniem/lodžijām>,',
+    ' "stavi":<virszemes stāvu skaits>,"lifti":<liftu skaits>,"zemes_platiba":<zemes vienības platība m2>,"apbuves_laukums":<būves apbūves laukums m2>,',
+    ' "zonas":{"kapnu":<kāpņu telpas, gaiteņi, vestibils m2>,"ratinu":<ratiņu/velosipēdu telpa m2>,"tehniskas":<tehniskās telpas + apsaimniekotāja telpa m2>,"atputas":<koplietošanas atpūtas telpa/sanmezgls m2>,"terase":<koplietošanas terase m2>},',
+    ' "citas_zonas":[{"nosaukums":"<cita koplietošanas iekštelpa>","m2":<m2>}],',
+    ' "teritorija":{"cieti":<cietie segumi m2>,"zale":<zālāji, apstādījumi m2>},',
+    ' "piezimes":"<īsi latviski: no kurienes ņemti skaitļi, kas ir aplēse>"}',
+    'Noteikumi:',
+    '- Koplietošanas telpas ņem no telpu grupām ar lietošanas veidu, kas satur "koplietošanas", "kāpņu telpa", "gaitenis", "vestibils", "tehniskā", "katlu", "siltummezgls", "elektro" u.tml. Pagrabu/noliktavu nodalījumus, kas pieder dzīvokļiem, neskaiti.',
+    '- Ja ir tikai kopējā koplietošanas platība bez sadalījuma, liec to "kapnu".',
+    '- Pazemes autostāvvietu NEliec zonās; pieraksti to piezīmēs.',
+    '- Teritorija = zemes vienības platība − apbūves laukums. Ja seguma sadalījums nav zināms, aplēs: cietie segumi 40%, zālāji 60%, un piezīmēs to norādi.',
+    '- Dzīvokļu skaits = telpu grupu skaits ar lietošanas veidu "dzīvoklis" (vai norādītais dzīvokļu skaits).'
+  ].join('\n');
+  const out = aiCall_(system, text, 1500);
+  const m = out.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('AI neatgrieza datus. Pamēģini ielīmēt vairāk kadastra teksta.');
+  let j;
+  try { j = JSON.parse(m[0]); } catch (e) { throw new Error('AI atbildi neizdevās nolasīt.'); }
+  log_(u.name, 'AI kadastrs', '', (j.adrese || '') + '');
+  return j;
 }
