@@ -16,8 +16,10 @@
  */
 
 const APP_NAME = 'SH | Budžets';
-const SHEETS = { USERS: 'Lietotāji', BUD: 'Budžeti', VER: 'Versijas', LOG: 'Žurnāls' };
-const USER_HEAD = ['Vārds', 'PIN', 'Loma', 'Aktīvs'];
+const SHEETS = { USERS: 'Lietotāji', BUD: 'Budžeti', VER: 'Versijas', LOG: 'Žurnāls', SET: 'Iestatījumi', TPL: 'Veidnes' };
+const USER_HEAD = ['Vārds', 'PIN', 'Loma', 'Aktīvs', 'E-pasts'];
+const TPL_HEAD = ['ID', 'Nosaukums', 'Apraksts', 'Autors', 'Izveidots', 'Dati'];
+const APP_URL = 'https://vaitkevix.github.io/budzets/';
 const BUD_HEAD = ['ID', 'Nosaukums', 'Adrese', 'Pasūtītājs', 'Izpildītājs', 'Sagatavots', 'Derīgs līdz',
   'Autors', 'Statuss', 'Cena bez PVN', 'Cena ar PVN', 'Versija', 'Izveidots', 'Atjaunots',
   'Vadības komentārs', 'Izskatīja', 'Dati', 'Dzīvokļu m²'];
@@ -53,7 +55,12 @@ function doPost(e) {
 }
 
 const ACTIONS = {
-  login: (u) => { log_(u.name, 'Pieteicās'); return { user: u }; },
+  login: (u) => { log_(u.name, 'Pieteicās'); return { user: u, settings: publicSettings_() }; },
+  tplList: (u) => ({ items: tplList_() }),
+  tplGet: (u, r) => ({ tpl: tplGet_(r.id) }),
+  tplSave: (u, r) => ({ tpl: tplSave_(u, r) }),
+  tplDel: (u, r) => ({ done: tplDel_(u, r.id) }),
+  sendPdf: (u, r) => ({ sent: sendPdfMail_(u, r) }),
   list: (u) => ({ items: listBudgets_(u) }),
   get: (u, r) => r.versija ? getVersion_(u, r.id, r.versija) : getBudget_(u, r.id),
   save: (u, r) => saveBudget_(u, r),
@@ -88,6 +95,8 @@ function setup() {
   mk(SHEETS.BUD, BUD_HEAD);
   mk(SHEETS.VER, VER_HEAD);
   mk(SHEETS.LOG, LOG_HEAD);
+  ensureSettings_(); ensureTpl_();
+  const uh = u.getRange(1, 1, 1, USER_HEAD.length); uh.setValues([USER_HEAD]).setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff');
   if (u.getLastRow() < 2) {
     u.getRange(2, 1, 3, 4).setValues([
       ['Admins', '1234', 'admin', 'jā'],
@@ -131,7 +140,7 @@ function usersRead_() {
   const v = sh_(SHEETS.USERS).getDataRange().getValues();
   v.shift();
   return v.filter(r => r[0] && norm_(r[3]) !== 'nē')
-    .map(r => ({ name: String(r[0]).trim(), pin: String(r[1]).trim(), role: norm_(r[2]) || 'gatavotājs' }));
+    .map(r => ({ name: String(r[0]).trim(), pin: String(r[1]).trim(), role: norm_(r[2]) || 'gatavotājs', email: String(r[4] || '').trim() }));
 }
 
 /** Lietotājs pēc PIN (PIN jābūt unikālam) */
@@ -139,7 +148,7 @@ function auth_(pin) {
   pin = String(pin || '').trim();
   if (!pin) return null;
   const u = users_().find(x => x.pin === pin);
-  return u ? { name: u.name, role: u.role } : null;
+  return u ? { name: u.name, role: u.role, email: u.email || '' } : null;
 }
 
 function budRows_() {
@@ -253,7 +262,12 @@ function saveBudget_(u, payload) {
     sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.bezPVN), payload.piezime || '', json]);
     bust_();
     log_(u.name, row ? 'Saglabāja' : 'Izveidoja', id, 'v' + version + ' · ' + status);
-    return { id: id, versija: version, statuss: status, atjaunots: ts };
+    let sent = [];
+    if (payload.sutitVadibai && status === 'Iesniegts') {
+      try { sent = mailBudget_(u, { id: id, versija: version, statuss: status, autors: autors }, d, c, settingList_('Vadības e-pasti'), 'iesniegts', payload.piezime, true); }
+      catch (e) { log_(u.name, 'E-pasta kļūda', id, String(e.message || e)); sent = ['KĻŪDA: ' + (e.message || e)]; }
+    }
+    return { id: id, versija: version, statuss: status, atjaunots: ts, sent: sent };
   } finally {
     lock.releaseLock();
   }
@@ -278,6 +292,17 @@ function setStatus_(u, id, status, comment) {
   sh_(SHEETS.VER).appendRow([id, meta.versija, now_(), u.name, status, meta.bezPVN, comment || ('Statuss → ' + status), '']);
   bust_();
   log_(u.name, 'Statuss', id, status + (comment ? ' · ' + comment : ''));
+  if ((status === 'Apstiprināts' || status === 'Noraidīts') && settingOn_('Sūtīt paziņojumus')) {
+    try {
+      const au = usersRead_().find(x => norm_(x.name) === norm_(meta.autors));
+      if (au && au.email && norm_(au.name) !== norm_(u.name)) {
+        const d = JSON.parse(f.row[BUD_HEAD.indexOf('Dati')] || '{}');
+        mailNotice_(au.email, (status === 'Apstiprināts' ? '✓ Apstiprināts: ' : '✗ Noraidīts: ') + (d.objekts && d.objekts.nosaukums || id),
+          `<p>Budžetu <b>${esc_((d.objekts && d.objekts.nosaukums) || id)}</b> (${esc_(id)}, ${eur_(meta.bezPVN)} mēnesī bez PVN) vadība (${esc_(u.name)}) <b>${status === 'Apstiprināts' ? 'apstiprināja' : 'noraidīja'}</b>.</p>` +
+          (comment ? `<p>Komentārs: <i>${esc_(comment)}</i></p>` : ''));
+      }
+    } catch (e) { log_(u.name, 'E-pasta kļūda', id, String(e.message || e)); }
+  }
   return true;
 }
 
@@ -698,4 +723,114 @@ function aiTelpas_(u, nosaukumi) {
 
 
 /** Ja kāds labo tabulu ar roku — notīra kešu */
-function onEdit() { try { CacheService.getScriptCache().removeAll(['meta', 'users']); } catch (e) {} }
+function onEdit() { try { CacheService.getScriptCache().removeAll(['meta', 'users', 'settings']); } catch (e) {} }
+
+
+/* ---------------- Iestatījumi ---------------- */
+const SETTINGS_DEFAULT = [
+  ['Vadības e-pasti', 'kaspars@selectumhome.lv', 'Kam sūtīt iesniegto budžetu PDF (vairākus atdalīt ar komatu)'],
+  ['Sūtīt paziņojumus', 'jā', 'Autoram e-pasts, kad budžets apstiprināts / noraidīts (autora e-pasts — lapā «Lietotāji»)'],
+  ['Sūtītāja vārds', 'SH | Budžets', 'Vārds, kas redzams e-pasta sūtītāja laukā']
+];
+function ensureSettings_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(SHEETS.SET);
+  if (!sh) {
+    sh = ss.insertSheet(SHEETS.SET);
+    sh.getRange(1, 1, 1, 3).setValues([['Iestatījums', 'Vērtība', 'Paskaidrojums']]).setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff');
+    sh.getRange(2, 1, SETTINGS_DEFAULT.length, 3).setValues(SETTINGS_DEFAULT);
+    sh.setColumnWidth(1, 200); sh.setColumnWidth(2, 320); sh.setColumnWidth(3, 460); sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function settings_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('settings');
+  if (hit) return JSON.parse(hit);
+  const o = {}; SETTINGS_DEFAULT.forEach(r => o[r[0]] = r[1]);
+  ensureSettings_().getDataRange().getValues().slice(1).forEach(r => { if (r[0]) o[String(r[0]).trim()] = String(r[1]).trim(); });
+  cache.put('settings', JSON.stringify(o), 60);
+  return o;
+}
+function settingList_(k) { return String(settings_()[k] || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)); }
+function settingOn_(k) { return norm_(settings_()[k]) !== 'nē'; }
+function publicSettings_() { return { vadibasEpasti: settingList_('Vadības e-pasti') }; }
+
+/* ---------------- E-pasts ---------------- */
+function mailWrap_(inner) {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1b1f1d;max-width:560px">
+    <div style="background:#0f6b5c;color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:bold;font-size:16px">SH | Budžets</div>
+    <div style="border:1px solid #dfe7e2;border-top:0;padding:18px;border-radius:0 0 10px 10px">${inner}
+    <p style="margin-top:18px"><a href="${APP_URL}" style="background:#0f6b5c;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold">Atvērt SH | Budžets</a></p></div>
+    <p style="color:#8a8a8a;font-size:11px;text-align:center;margin-top:10px">${copy_()}</p></div>`;
+}
+function mailNotice_(to, subject, inner, attachments) {
+  MailApp.sendEmail({ to: to, subject: subject, htmlBody: mailWrap_(inner), name: settings_()['Sūtītāja vārds'] || APP_NAME, attachments: attachments || [] });
+}
+/** Budžeta e-pasts ar PDF pielikumu */
+function mailBudget_(u, meta, d, c, to, kind, note, attach) {
+  to = (to || []).filter(Boolean);
+  if (!to.length) throw new Error('Nav e-pasta adreses (lapa «Iestatījumi» → Vadības e-pasti).');
+  const o = (d && d.objekts) || {};
+  const nos = o.nosaukums || o.adrese || meta.id || 'Budžets';
+  const atts = [];
+  if (attach) atts.push(Utilities.newBlob(pdfHtml_(d, c, meta), 'text/html', 'tame.html').getAs('application/pdf').setName(fileName_(d, meta) + '.pdf'));
+  const inner = `<p>${kind === 'iesniegts' ? `<b>${esc_(u.name)}</b> iesniedza budžetu izskatīšanai.` : `<b>${esc_(u.name)}</b> nosūtīja budžetu.`}</p>
+    <table style="border-collapse:collapse;width:100%;font-size:14px">
+      <tr><td style="padding:6px 0;color:#6d7470">Objekts</td><td style="padding:6px 0;text-align:right"><b>${esc_(nos)}</b></td></tr>
+      <tr><td style="padding:6px 0;color:#6d7470">Adrese</td><td style="padding:6px 0;text-align:right">${esc_(o.adrese || '—')}</td></tr>
+      <tr><td style="padding:6px 0;color:#6d7470">Budžets</td><td style="padding:6px 0;text-align:right">${esc_(meta.id || '')}${meta.versija ? ' · v' + meta.versija : ''}</td></tr>
+      <tr><td style="padding:6px 0;color:#6d7470">Cena mēnesī bez PVN</td><td style="padding:6px 0;text-align:right;font-size:18px"><b>${eur_(c.bezPVN)}</b></td></tr>
+      ${c.perM2bez != null ? `<tr><td style="padding:6px 0;color:#6d7470">€ / dzīvokļu m²</td><td style="padding:6px 0;text-align:right">€${num_(c.perM2bez, 4)}</td></tr>` : ''}
+    </table>${note ? `<p style="background:#eef4f1;padding:10px 12px;border-radius:8px">Piezīme: ${esc_(note)}</p>` : ''}
+    ${attach ? '<p style="color:#6d7470">Tāme ar pielikumiem — PDF failā.</p>' : ''}`;
+  mailNotice_(to.join(','), (kind === 'iesniegts' ? 'Iesniegts budžets: ' : 'Budžets: ') + nos + ' — ' + eur_(c.bezPVN) + '/mēn. bez PVN', inner, atts);
+  log_(u.name, 'E-pasts', meta.id || '', to.join(', '));
+  return to;
+}
+function sendPdfMail_(u, r) {
+  const to = String(r.to || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)).slice(0, 10);
+  if (r.id) { const f = findRow_(r.id); if (f && !canSee_(u, rowToMeta_(f.row))) throw new Error('Nav piekļuves.'); }
+  return mailBudget_(u, r.meta || {}, r.data || {}, r.calc || {}, to, 'sutits', r.piezime || '', true);
+}
+/** Palaid vienreiz no redaktora, lai atļautu e-pasta sūtīšanu */
+function atlaut_epastu() {
+  Logger.log('Atlikušais e-pastu limits šodien: ' + MailApp.getRemainingDailyQuota());
+  ensureSettings_(); ensureTpl_();
+  const u = sh_(SHEETS.USERS);
+  if (!u.getRange(1, 5).getValue()) u.getRange(1, 5).setValue('E-pasts').setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff');
+  u.setColumnWidth(5, 240);
+  CacheService.getScriptCache().removeAll(['meta', 'users', 'settings']);
+}
+
+/* ---------------- Veidnes ---------------- */
+function ensureTpl_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(SHEETS.TPL);
+  if (!sh) { sh = ss.insertSheet(SHEETS.TPL); sh.getRange(1, 1, 1, TPL_HEAD.length).setValues([TPL_HEAD]).setFontWeight('bold').setBackground('#0f6b5c').setFontColor('#ffffff'); sh.setFrozenRows(1); }
+  return sh;
+}
+function tplList_() {
+  const v = ensureTpl_().getDataRange().getValues(); v.shift();
+  return v.filter(r => r[0]).map(r => ({ id: r[0], nosaukums: r[1], apraksts: r[2], autors: r[3], izveidots: String(r[4]) }));
+}
+function tplGet_(id) {
+  const v = ensureTpl_().getDataRange().getValues();
+  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === String(id)) return { id: v[i][0], nosaukums: v[i][1], data: JSON.parse(v[i][5] || '{}') };
+  throw new Error('Veidne nav atrasta.');
+}
+function tplSave_(u, r) {
+  if (!isMaker_(u)) throw new Error('Veidnes veido budžetu gatavotājs.');
+  const nos = String(r.nosaukums || '').trim(); if (!nos) throw new Error('Ievadi veidnes nosaukumu.');
+  const sh = ensureTpl_(), id = 'V-' + Utilities.formatDate(new Date(), TZ, 'yyMMddHHmmss');
+  sh.appendRow([id, nos, String(r.apraksts || ''), u.name, now_(), JSON.stringify(r.data || {})]);
+  log_(u.name, 'Veidne', id, nos);
+  return { id: id, nosaukums: nos };
+}
+function tplDel_(u, id) {
+  const sh = ensureTpl_(), v = sh.getDataRange().getValues();
+  for (let i = 1; i < v.length; i++) if (String(v[i][0]) === String(id)) {
+    if (u.role !== 'admin' && norm_(v[i][3]) !== norm_(u.name)) throw new Error('Dzēst var tikai savu veidni (vai admins).');
+    sh.deleteRow(i + 1); log_(u.name, 'Dzēsa veidni', id, v[i][1]); return true;
+  }
+  return false;
+}
