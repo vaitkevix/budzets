@@ -25,11 +25,17 @@ const VER_HEAD = ['ID', 'Versija', 'Laiks', 'Lietotājs', 'Statuss', 'Cena bez P
 const LOG_HEAD = ['Laiks', 'Lietotājs', 'Darbība', 'Budžets', 'Info'];
 const STATUSES = ['Melnraksts', 'Iesniegts', 'Apstiprināts', 'Noraidīts', 'Arhivēts'];
 const TZ = 'Europe/Riga';
+function copy_() { return '© ' + Utilities.formatDate(new Date(), TZ, 'yyyy') + ' VAITKEVIX, SIA. Visas tiesības aizsargātas.'; }
+/** Copyright rinda Excel lapas apakšā */
+function addCopy_(sh) {
+  const r = sh.getLastRow() + 2;
+  sh.getRange(r, 1).setValue(copy_()).setFontColor('#888888').setFontStyle('italic').setFontSize(9);
+}
 
 /* ---------------- Web app ---------------- */
 
 function doGet() {
-  return ContentService.createTextOutput(APP_NAME + ' API — lietotne: https://vaitkevix.github.io/budzets/');
+  return ContentService.createTextOutput(APP_NAME + ' API — lietotne: https://vaitkevix.github.io/budzets/ · ' + copy_());
 }
 
 function doPost(e) {
@@ -333,6 +339,7 @@ function exportListXlsx_(u, ids) {
     }
     sh.setFrozenRows(1);
     sh.autoResizeColumns(1, head.length);
+    addCopy_(sh);
     SpreadsheetApp.flush();
     return { name: name + '.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', b64: xlsxBytes_(ss.getId()) };
   } finally {
@@ -453,6 +460,7 @@ function buildWorkbook_(ss, d, c, meta) {
   pa.getRange(1, 1, prm.length, 2).setValues(prm); styleHeader_(pa.getRange(1, 1, 1, 2));
   [6, 7, 10, 11, 18, 19, 20, 21].forEach(i => pa.getRange(i, 2).setNumberFormat('0.00%'));
   pa.setColumnWidth(1, 300);
+  [t, p, w, s, inv, pa].forEach(addCopy_);
   ss.setActiveSheet(t);
 }
 
@@ -476,7 +484,8 @@ function pdfHtml_(d, c, meta) {
   .res td{background:${lav}}
   .big{font-size:15pt;font-weight:bold;color:${dark}}
   .pb{page-break-before:always}
-  .foot{margin-top:18px;color:#999;font-size:7.5pt}`;
+  .foot{margin-top:18px;color:#999;font-size:7.5pt}
+  .copy{margin-top:16px;padding-top:6px;border-top:1px solid #e3e3e3;color:#8a8a8a;font-size:7.5pt;text-align:center}`;
   const objRows = [['Nosaukums', o.nosaukums], ['Adrese', o.adrese], ['Pasūtītājs', o.pasutitajs],
     ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '—') + ' / ' + (o.lietderiga ? num_(o.lietderiga, 1) : '—')]]
     .map(r => `<tr><td class="muted">${esc_(r[0])}</td><td class="v">${esc_(r[1] || '')}</td></tr>`).join('');
@@ -507,6 +516,7 @@ function pdfHtml_(d, c, meta) {
   <h2>Tāme</h2>
   <table><tr><th>Nr.</th><th>Pozīcija (MK 408 — 1.1. Sanitārā apkope)</th><th class="r">Mēnesī</th><th class="r">Gadā</th><th class="r">Daļa</th></tr>${lines}</table>
   <div class="foot">Pilnā stundas cena: apkopēja ${eur_(c.fullA)}, sētnieks ${eur_(c.fullS)} (ar atvaļinājuma rezervi un VSAOI). Neproduktīvais laiks ${pct_(d.param.neprod, 0)}. Minimālās algas pārbaude: ${c.minOk ? 'atbilst' : 'ZEM MINIMĀLĀS ALGAS'}.</div>
+  <div class="copy">${copy_()}</div>
 
   <div class="pb"></div>
   <h2>Pielikums 1 — Regulārie darbi</h2>
@@ -518,6 +528,7 @@ function pdfHtml_(d, c, meta) {
   <h2>Pielikums 3 — Inventārs</h2>
   <table><tr><th>Grupa</th><th>Pozīcija</th><th>Apraksts</th><th class="r">Cena</th></tr>${invRows}
   <tr class="tot"><td colspan="3">Kopā (nolietojums ${d.param.invMen} mēn. → ${eur_(c.inv)} mēnesī)</td><td class="r">${eur_(c.invTotal)}</td></tr></table>
+  <div class="copy">${copy_()}</div>
   </body></html>`;
 }
 

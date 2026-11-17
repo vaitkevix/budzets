@@ -8,7 +8,7 @@
   const G = '#0f6b5c';
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;right:16px;top:16px;z-index:2147483647;width:360px;max-height:85vh;overflow:auto;padding:16px;border-radius:14px;background:#fff;color:#1b1f1d;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 18px 50px -12px rgba(0,0,0,.45);border:1px solid #d9e3de';
-  box.innerHTML = '<b style="font-size:15px;color:' + G + '">SH | Budžets · kadastrs</b><div id="shk_s" style="margin-top:8px">Sāku…</div><div style="height:6px;border-radius:4px;background:#e8efe9;margin-top:10px;overflow:hidden"><i id="shk_p" style="display:block;height:100%;width:3%;background:' + G + ';transition:width .2s"></i></div><button id="shk_x" style="margin-top:12px;border:0;background:#eef2ef;border-radius:8px;padding:7px 12px;cursor:pointer">Aizvērt</button>';
+  box.innerHTML = '<b style="font-size:15px;color:' + G + '">SH | Budžets · kadastrs</b><div id="shk_s" style="margin-top:8px">Sāku…</div><div style="height:6px;border-radius:4px;background:#e8efe9;margin-top:10px;overflow:hidden"><i id="shk_p" style="display:block;height:100%;width:3%;background:' + G + ';transition:width .2s"></i></div><div style="display:flex;align-items:center;gap:8px;margin-top:12px"><button id="shk_x" style="border:0;background:#eef2ef;border-radius:8px;padding:7px 12px;cursor:pointer">Aizvērt</button><span style="margin-left:auto;font-size:11px;color:#8a938f">© ' + new Date().getFullYear() + ' VAITKEVIX, SIA</span></div>';
   document.body.appendChild(box);
   const $s = () => box.querySelector('#shk_s');
   const st = (t, p) => { $s().innerHTML = t; if (p != null) box.querySelector('#shk_p').style.width = Math.max(3, p) + '%'; };
