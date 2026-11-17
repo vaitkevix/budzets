@@ -547,11 +547,15 @@
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
   @media (max-width:560px){.g3{grid-template-columns:1fr 1fr}}
-  .g2 .field,.g3 .field{margin-bottom:0}
+  .g2 .field,.g3 .field{margin-bottom:0;min-width:0}
+  .g2,.g3{align-items:start}
+  .field .hint{line-height:1.35}
+  .input[type=date]{min-width:0;-webkit-appearance:none;appearance:none}
   .gap{height:14px}
   .hint{margin-top:5px;font-size:12px;color:var(--ink-3);font-weight:600}
   .secs{overflow-x:auto;scrollbar-width:none;margin-bottom:12px;position:sticky;top:calc(var(--safe-t) + 64px);z-index:20;
-    background:var(--g-bar);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur)}
+    background:var(--g-pop);-webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur);box-shadow:0 8px 18px -12px rgba(20,35,28,.35)}
+  @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){ .secs{background:#fff} :root[data-theme="dark"] .secs{background:#1d2622} }
   .secs::-webkit-scrollbar{display:none}
   .secs button{flex:0 0 auto;padding:9px 14px}
   .bk-btn{color:var(--brand)}
@@ -1191,8 +1195,7 @@ const PANES={
       ${fld('Nosaukums',inp(o+'nosaukums',{ph:'piem. Hipokrāta 24A (53 dzīvokļi)'}))}
       ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga'}))}
       <div class="g2">${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas'}))}${fld('Izpildītājs',inp(o+'izpilditajs'))}</div><div class="gap"></div>
-      <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}))}</div>
-      <div class="hint" style="margin:-8px 0 16px">Dzīvokļu m² — lietderīgā platība bez balkoniem; no tās rēķina <b>uzk. izd. = € / m²</b>.</div>
+      <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}),'bez balkoniem; no tās rēķina € / m²')}</div><div class="gap"></div>
       ${fld('Piezīmes <span class="opt">· nav obligāti</span>',`<textarea class="textarea" data-p="objekts.piezimes" oninput="onIn(this)">${esc(S.d.objekts.piezimes||'')}</textarea>`)}
       ${S.ro?'':`<button class="btn btn-primary btn-block" onclick="setSec('platibas')">Tālāk: platības</button>`}</div>`;
   },
