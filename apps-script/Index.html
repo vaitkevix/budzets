@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SH | Budžets</title>
+<style>
+:root{
+  --p:#5B2E91; --pd:#3D1E66; --pl:#EFE9F7; --pll:#F7F4FB; --cream:#FFF6DD;
+  --ink:#1d1a22; --mut:#7a7385; --line:#e4dfeb; --bg:#f5f3f8; --ok:#1f8a4c; --warn:#c0392b; --amber:#b7791f;
+  --r:14px; --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+
+/* Header */
+.top{position:sticky;top:0;z-index:20;background:var(--p);color:#fff;padding:calc(10px + var(--safe-t)) 16px 10px;display:flex;align-items:center;gap:10px}
+.top .brand{font-weight:700;font-size:17px;letter-spacing:.2px;flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+.top .brand small{font-weight:500;opacity:.75;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .back{background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:10px;padding:6px 10px;font-weight:600}
+.chip{background:rgba(255,255,255,.16);border-radius:999px;padding:5px 11px;font-size:13px;font-weight:600;white-space:nowrap;border:0;color:#fff}
+
+main{max-width:1100px;margin:0 auto;padding:16px 14px calc(110px + var(--safe-b))}
+
+/* Cards / forms */
+.card{background:#fff;border-radius:var(--r);border:1px solid var(--line);padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 10px;font-size:15px;color:var(--pd);display:flex;align-items:center;gap:8px}
+.card h3 .sp{flex:1}
+label.f{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-bottom:4px}
+.in{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 10px;outline:none;min-height:40px}
+.in:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(91,46,145,.12)}
+.in.num{text-align:right;font-variant-numeric:tabular-nums}
+.in.cream{background:var(--cream)}
+.grid{display:grid;gap:10px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:640px){.g2,.g3{grid-template-columns:1fr}}
+.btn{border:0;border-radius:11px;padding:10px 14px;font-weight:650;background:var(--pl);color:var(--pd);display:inline-flex;align-items:center;gap:6px;justify-content:center;min-height:40px}
+.btn.pri{background:var(--p);color:#fff}
+.btn.dark{background:var(--pd);color:#fff}
+.btn.ok{background:var(--ok);color:#fff}
+.btn.bad{background:#fbe9e7;color:var(--warn)}
+.btn.ghost{background:transparent;color:var(--p);border:1px dashed #c9b8e0}
+.btn.sm{padding:6px 10px;min-height:32px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--mut)}
+.small{font-size:12.5px}
+
+/* Tabs */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:2px 0 10px;margin:0 -2px;scrollbar-width:none;position:sticky;top:calc(56px + var(--safe-t));z-index:15;background:var(--bg)}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font-weight:600;font-size:13.5px;white-space:nowrap;color:var(--mut)}
+.tab.on{background:var(--p);color:#fff;border-color:var(--p)}
+
+/* Line items */
+.items{display:flex;flex-direction:column;gap:8px}
+.item{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;display:grid;gap:8px;grid-template-columns:32px 1fr;align-items:start}
+.item.off{background:#faf9fb}
+.item.off .body{opacity:.5}
+.item .chk{width:24px;height:24px;margin-top:8px;accent-color:var(--p)}
+.item .body{display:grid;gap:8px;min-width:0}
+.item .line1{display:flex;gap:8px;align-items:center}
+.item .line1 .in{flex:1}
+.item .fields{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+.item .fields .f{font-size:11px}
+.item .res{display:flex;justify-content:flex-end;gap:14px;font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+.item .res b{color:var(--ink)}
+.x{border:0;background:transparent;color:#b3a9c2;font-size:20px;line-height:1;padding:4px 6px;border-radius:8px}
+.x:hover{background:#f4eff9;color:var(--warn)}
+.sum{display:flex;justify-content:space-between;padding:10px 4px 0;font-weight:700;color:var(--pd)}
+.pill{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700}
+.st-Melnraksts{background:#eee;color:#555}
+.st-Iesniegts{background:#fff2cc;color:#8a6100}
+.st-Apstiprināts{background:#dcf3e5;color:#156b3a}
+.st-Noraidīts{background:#fbe2df;color:#a93226}
+.st-Arhivēts{background:#e8e6ec;color:#6f6880}
+
+/* Tāme table */
+table.t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.t th{background:var(--p);color:#fff;text-align:left;font-size:12.5px;padding:8px}
+table.t td{padding:8px;border-bottom:1px solid var(--line);font-size:14px}
+table.t .r{text-align:right}
+table.t tr.b td{background:var(--pl);font-weight:700}
+table.t tr.g td{background:var(--pd);color:#fff;font-weight:800}
+table.t td.nr{color:var(--mut);width:42px}
+.scroll{overflow-x:auto;border-radius:12px;border:1px solid var(--line)}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.hero{grid-template-columns:1fr}}
+.big{font-size:30px;font-weight:800;color:var(--pd);letter-spacing:-.5px}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);gap:10px}
+.kv:last-child{border:0}
+.kv span:first-child{color:var(--mut)}
+.alert{border-radius:12px;padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+.alert.warn{background:#fdecea;color:#922b21}
+.alert.info{background:var(--pl);color:var(--pd)}
+.alert.ok{background:#e3f5ea;color:#155d34}
+
+/* Bottom bar */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);padding:10px 14px calc(10px + var(--safe-b));box-shadow:0 -6px 18px rgba(40,20,70,.06)}
+.bar .wrap{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.bar .price{flex:1;min-width:0}
+.bar .price .l{font-size:11.5px;color:var(--mut);font-weight:600}
+.bar .price .v{font-size:21px;font-weight:800;color:var(--pd);line-height:1.1}
+.bar .acts{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto}
+
+/* List */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+@media(max-width:760px){.kpis{grid-template-columns:1fr 1fr}}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.kpi .l{font-size:12px;color:var(--mut);font-weight:600}
+.kpi .v{font-size:22px;font-weight:800;color:var(--pd)}
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+@media(max-width:760px){.filters{grid-template-columns:1fr 1fr}.filters .in:first-child{grid-column:1/-1}}
+.bud{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer}
+.bud:hover{border-color:#cdbfe0}
+.bud .m{flex:1;min-width:0}
+.bud .t1{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bud .t2{font-size:12.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bud .pr{text-align:right;font-weight:800;color:var(--pd);font-variant-numeric:tabular-nums}
+.bud .pr small{display:block;font-weight:600;color:var(--mut);font-size:11.5px}
+.empty{text-align:center;color:var(--mut);padding:40px 10px}
+.seg{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin-bottom:12px}
+.seg button{border:0;background:transparent;border-radius:9px;padding:7px 12px;font-weight:650;color:var(--mut)}
+.seg button.on{background:var(--p);color:#fff}
+
+/* Login */
+.login{max-width:380px;margin:8vh auto 0;padding:0 16px}
+.logo{width:64px;height:64px;border-radius:18px;background:var(--p);color:#fff;display:grid;place-items:center;font-weight:800;font-size:22px;margin:0 auto 14px}
+.login h1{text-align:center;margin:0 0 4px;font-size:22px;color:var(--pd)}
+.login p{text-align:center;margin:0 0 20px;color:var(--mut)}
+
+/* Sheet / modal */
+.ov{position:fixed;inset:0;background:rgba(25,12,45,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#fff;width:100%;max-width:560px;max-height:86vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + var(--safe-b))}
+@media(min-width:700px){.ov{align-items:center}.sheet{border-radius:18px}}
+.sheet h3{margin:0 0 12px;color:var(--pd)}
+.ver{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.ver .m{flex:1}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + var(--safe-b));background:var(--pd);color:#fff;padding:10px 16px;border-radius:12px;z-index:60;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:90vw}
+.toast.err{background:var(--warn)}
+.spin{position:fixed;inset:0;z-index:70;background:rgba(255,255,255,.55);display:grid;place-items:center}
+.spin i{width:38px;height:38px;border-radius:50%;border:4px solid var(--pl);border-top-color:var(--p);animation:r .8s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}
+.ro .in{background:#faf9fb;pointer-events:none}
+table.t td.r,table.t th.r{white-space:nowrap}
+@media(max-width:520px){
+  .top .brand small{display:none}
+  table.t td,table.t th{padding:7px 6px;font-size:12.5px}
+  table.t td.nr{width:30px}
+  .bar .price .v{font-size:18px}
+  .bar .acts .btn{padding:9px 11px}
+}
+.ro .x,.ro .add,.ro .chk{pointer-events:none}
+.ro .add{display:none}
+</style>
+</head>
+<body>
+
+<header class="top" id="top">
+  <button class="back hidden" id="backBtn" onclick="goHome()">‹ Saraksts</button>
+  <div class="brand"><span>SH | Budžets</span><small id="subTitle"></small></div>
+  <button class="chip hidden" id="userChip" onclick="openUserSheet()"></button>
+</header>
+
+<!-- LOGIN -->
+<section id="vLogin" class="login hidden">
+  <div class="logo">€</div>
+  <h1>Budžeti un tāmes</h1>
+  <p>Sanitārās apkopes tāmes · SELECTUM HOME</p>
+  <div class="card">
+    <label class="f">Profils</label>
+    <select class="in" id="lgName"></select>
+    <div style="height:10px"></div>
+    <label class="f">PIN</label>
+    <input class="in" id="lgPin" type="password" inputmode="numeric" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div style="height:14px"></div>
+    <button class="btn pri" style="width:100%" onclick="doLogin()">Ienākt</button>
+  </div>
+</section>
+
+<!-- HOME -->
+<main id="vHome" class="hidden"></main>
+
+<!-- EDITOR -->
+<main id="vEdit" class="hidden"></main>
+
+<div class="bar hidden" id="bar"><div class="wrap">
+  <div class="price"><div class="l">Cena mēnesī ar PVN</div><div class="v" id="barPrice">€0,00</div></div>
+  <div class="acts" id="barActs"></div>
+</div></div>
+
+<div id="ovRoot"></div>
+
+<script>
+/* ================== Stāvoklis ================== */
+const S = { token:null, user:null, list:[], filter:{q:'',autors:'',statuss:'',gads:''}, scope:'all',
+            id:null, meta:null, d:null, tab:'objekts', ro:false, dirty:false, histVer:null };
+const LS = { get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}, del(k){try{localStorage.removeItem(k)}catch(e){}} };
+
+function run(fn, ...args){
+  return new Promise((res, rej) => {
+    google.script.run.withSuccessHandler(res).withFailureHandler(e => {
+      const m = (e && e.message) || String(e);
+      if (m.indexOf('AUTH') >= 0) { logoutLocal(); toast('Sesija beigusies — ienāc vēlreiz', true); }
+      rej(new Error(m));
+    })[fn](...args);
+  });
+}
+async function busy(p){ const el=document.createElement('div'); el.className='spin'; el.innerHTML='<i></i>'; document.body.appendChild(el);
+  try{ return await p; } finally { el.remove(); } }
+function toast(t, err){ const el=document.createElement('div'); el.className='toast'+(err?' err':''); el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(), err?4200:2400); }
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const r1 = x => Math.round((+x||0)*10)/10;
+const r2 = x => Math.round((+x||0)*100)/100;
+function eur(x){ const n=r2(x); const s=Math.abs(n).toFixed(2).split('.'); s[0]=s[0].replace(/\B(?=(\d{3})+(?!\d))/g,' '); return (n<0?'−':'')+'€'+s[0]+','+s[1]; }
+function nfmt(x,d){ if(x===''||x==null) return ''; const n=+x; if(!isFinite(n)) return ''; return (d==null? String(Math.round(n*10000)/10000) : n.toFixed(d)).replace('.',','); }
+function pnum(v){ if(typeof v==='number') return v; const n=parseFloat(String(v).replace(/\s/g,'').replace(',','.')); return isFinite(n)?n:0; }
+function pct(x,d){ return ((+x||0)*100).toFixed(d==null?1:d).replace('.',',').replace(/,0$/,'')+'%'; }
+function lvDate(iso){ if(!iso) return ''; const p=String(iso).slice(0,10).split('-'); return p.length===3? p[2]+'.'+p[1]+'.'+p[0] : iso; }
+function isoToday(add){ const d=new Date(); if(add) d.setMonth(d.getMonth()+add); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+const uid = () => Math.random().toString(36).slice(2,9);
+const isMgmt = () => S.user && (S.user.role==='vadība' || S.user.role==='admin');
+const isMaker = () => S.user && (S.user.role==='gatavotājs' || S.user.role==='admin');
+const roleLabel = r => ({admin:'Admins', 'gatavotājs':'Gatavotājs', 'vadība':'Vadība'})[r] || r;
+
+/* ================== Noklusējuma budžets (no Hipokrāta 24A veidnes) ================== */
+function blankBudget(){
+  const z = (n,t,m)=>({id:uid(),nosaukums:n,tips:t,m2:m});
+  const telpas=[ z('Kāpņu telpas, gaiteņi, vestibils','iek',0), z('Ratiņu / velosipēdu telpa','iek',0),
+    z('Tehniskās telpas + apsaimniekotāja telpa','iek',0), z('Koplietošanas atpūtas telpa ar sanmezglu','iek',0),
+    z('Koplietošanas terase','iek',0), z('Cietie segumi: brauktuves, stāvvietas, ietves','cieti',0),
+    z('Zālāji, apstādījumi','zale',0) ];
+  const T = i => 'z:'+telpas[i].id;
+  const w=(n,zona,izp,src,m2,reizes,raziba)=>({id:uid(),on:true,nosaukums:n,zona,izp,src,m2,reizes,raziba});
+  const A='Apkopēja', Sx='Sētnieks', I='iekštelpas', Te='teritorija';
+  return {
+    objekts:{ nosaukums:'', adrese:'', pasutitajs:'', izpilditajs:'Selectum home', sagatavots:isoToday(), derigs:isoToday(1), dzivokli:'', lietderiga:'', piezimes:'' },
+    telpas,
+    darbi:[
+      w('Kāpņu telpu, gaiteņu, vestibila un ratiņu telpas sausā un mitrā uzkopšana',I,A,'',0,4,200),
+      w('Lifta kabīnes uzkopšana',I,A,'',0,4,8),
+      w('Tehnisko telpu un apsaimniekotāja telpas uzkopšana',I,A,T(2),0,1,150),
+      w('Atpūtas telpas un sanmezgla uzkopšana',I,A,T(3),0,4,150),
+      w('Koplietošanas terases uzkopšana',I,A,T(4),0,1,300),
+      w('Margu, durvju, rokturu, pastkastīšu mitrā tīrīšana',I,A,'',0,4,350),
+      w('Ģenerālā uzkopšana (sienas, radiatori, gaismekļi)',I,A,'iek',0,0.17,60),
+      w('Cieto segumu slaucīšana (3× nedēļā)',Te,Sx,'cieti',0,13,1500),
+      w('Nezāļu attīrīšana no segumiem (5× sezonā, vidēji gadā)',Te,Sx,'cieti',0,0.42,400),
+      w('Zālāju, mulčas, nokritušo zaru savākšana',Te,Sx,'zale',0,4,1500),
+      w('Lapu grābšana (vidēji gadā)',Te,Sx,'zale',0,1,300),
+      w('Atkritumu nojumes uzkopšana, urnu iztukšošana',Te,Sx,'atkr',0,12,60),
+      w('Bērnu rotaļu laukuma apkope un pārbaude',Te,Sx,'',0,4,200),
+      w('Krasta / grāvja un caurtekas sakopšana (5× gadā)',Te,Sx,'',0,0.42,300),
+      w('Sniega tīrīšana ietvēs un pie ieejām (ziemā, vidēji gadā)',Te,Sx,'',0,2,300),
+      w('Objekta apsekošana (2× nedēļā, 0,5 h)',Te,Sx,'',1,8,2)
+    ],
+    sezon:[
+      {id:uid(),on:true,nosaukums:'Zāles pļaušana (dārznieks, pēc kalendārā grafika)',src:'zale',m2:0,cena:0.035,reizes:18},
+      {id:uid(),on:true,nosaukums:'Logu mazgāšana koplietošanas telpās',src:'logi',m2:0,cena:1.8,reizes:2},
+      {id:uid(),on:false,nosaukums:'Sniega tīrīšana ar traktortehniku (brauktuves, stāvvietas)',src:'cieti',m2:0,cena:0.03,reizes:12},
+      {id:uid(),on:false,nosaukums:'Maināmo paklāju serviss (2 paklāji, maiņa 2× mēnesī)',src:'',m2:2,cena:6,reizes:24},
+      {id:uid(),on:true,nosaukums:'Apstādījumu un augu grupu kopšana (dārznieks)',src:'',m2:0,cena:0.15,reizes:8},
+      {id:uid(),on:true,nosaukums:'Autostāvvietas nojumes zaļā jumta uzkopšana',src:'',m2:0,cena:0.5,reizes:1},
+      {id:uid(),on:true,nosaukums:'Gūliju, trapu, teku tīrīšana; laistīšanas sistēmas ieziemošana',src:'',m2:1,cena:150,reizes:2},
+      {id:uid(),on:true,nosaukums:'Pavasara ģenerālā teritorijas uzkopšana',src:'ter',m2:0,cena:0.05,reizes:1}
+    ],
+    invIek:[
+      ['Ķīmija','grīdām, logiem, sanitārajām telpām, dezinfekcijai, sienām',100,1],
+      ['Mikrošķiedras drānas','komplekts pa 5 gab. (zila, zaļa, sarkana)',15,1],
+      ['Logu mazgāšanas komplekts','spainis, nivelieris, pads',30,1],
+      ['Vermop','kāts, mopa pēda, 25 gab. mopi, spainis (uz 500 m²)',200,1],
+      ['Vecā tipa mopa komplekts','kāts, spainis, 10 gab. kokvilnas mopi',50,0],
+      ['Uzkopšanas rati — mazie','',200,1],
+      ['Uzkopšanas rati — lielie','',450,0],
+      ['Trepes vai pakāpiens','',50,1],
+      ['Flīsa jaka','',30,1],
+      ['Telpas labiekārtošana','plaukti, tējkanna, krēsls, galds, aptieciņa',100,1],
+      ['Veļas mašīna ar žāvētāju','ja māja nesaskaņo uz RUF',450,1]
+    ].map(a=>({id:uid(),nosaukums:a[0],apraksts:a[1],cena:a[2],on:!!a[3]})),
+    invPag:[
+      ['Dārza inventārs','ziemas, pavasara, vasaras',200,1],
+      ['Lielā šķūre','plastmasas vai dzelzs',35,1],
+      ['Ķerra 60 L','',50,1],
+      ['Lapu pūtējs — mazais','',250,0],
+      ['Lapu pūtējs — lielais','',450,1],
+      ['Cimdi','visai sezonai',50,1],
+      ['Apģērbs','jaka, veste, zābaki',60,1],
+      ['Kärcher','mehanizēta slota',550,1],
+      ['Instrumenti','',50,1],
+      ['Telpas labiekārtošana','plaukti, tējkanna, krēsls, galds, aptieciņa',100,1]
+    ].map(a=>({id:uid(),nosaukums:a[0],apraksts:a[1],cena:a[2],on:!!a[3]})),
+    param:{ likmeA:4.9, likmeS:4.9, minAlga:780, stundas:168, atv:0.0833, vsaoi:0.2359, neprod:0.15,
+            logiDala:0.10, atkritumi:20, stavvieta:0, matIek:0.05, matTer:0.005, invMen:60, transports:50,
+            netiesas:0.10, nepar:0.05, pelna:0, pvn:0.21 }
+  };
+}
+
+/* ================== Aprēķins (atbilst Numbers tāmei) ================== */
+function calc(d){
+  const P=d.param;
+  const iek=r2(d.telpas.filter(z=>z.tips==='iek').reduce((s,z)=>s+pnum(z.m2),0));
+  const cieti=r2(d.telpas.filter(z=>z.tips==='cieti').reduce((s,z)=>s+pnum(z.m2),0));
+  const zale=r2(d.telpas.filter(z=>z.tips==='zale').reduce((s,z)=>s+pnum(z.m2),0));
+  const ter=r2(cieti+zale);
+  const logi=Math.round(iek*pnum(P.logiDala));
+  const areas={iek,cieti,zale,ter,logi,atkr:pnum(P.atkritumi),stav:pnum(P.stavvieta)};
+  const area = row => { if(!row.src) return pnum(row.m2); if(row.src.indexOf('z:')===0){ const z=d.telpas.find(t=>'z:'+t.id===row.src); return z?pnum(z.m2):0; } return areas[row.src]||0; };
+  const fullA=r2(pnum(P.likmeA)*(1+pnum(P.atv))*(1+pnum(P.vsaoi)));
+  const fullS=r2(pnum(P.likmeS)*(1+pnum(P.atv))*(1+pnum(P.vsaoi)));
+  let hA=0,hS=0,darbiCost=0; const darbi=[]; const rowCalc={};
+  d.darbi.forEach(w=>{
+    const a=area(w), rz=pnum(w.raziba);
+    const h = rz>0 ? r1(a*pnum(w.reizes)/rz*(1+pnum(P.neprod))) : 0;
+    const full = w.izp==='Sētnieks'?fullS:fullA;
+    const cost = r2(h*full);
+    rowCalc[w.id]={area:a,h,cost};
+    if(!w.on) return;
+    if(w.izp==='Sētnieks') hS+=h; else hA+=h;
+    darbiCost+=cost;
+    darbi.push({nosaukums:w.nosaukums,zona:w.zona,izp:w.izp,area:a,reizes:pnum(w.reizes),raziba:rz,h,cost});
+  });
+  hA=r1(hA); hS=r1(hS); darbiCost=r2(darbiCost);
+  const algaA=r2(hA*pnum(P.likmeA)), algaS=r2(hS*pnum(P.likmeS));
+  const atv=r2((algaA+algaS)*pnum(P.atv));
+  const vsaoi=r2((algaA+algaS+atv)*pnum(P.vsaoi));
+  const materiali=r2(iek*pnum(P.matIek)+ter*pnum(P.matTer));
+  const invTotal=r2([...d.invIek,...d.invPag].filter(x=>x.on).reduce((s,x)=>s+pnum(x.cena),0));
+  const invIekT=r2(d.invIek.filter(x=>x.on).reduce((s,x)=>s+pnum(x.cena),0));
+  const invPagT=r2(d.invPag.filter(x=>x.on).reduce((s,x)=>s+pnum(x.cena),0));
+  const inv=pnum(P.invMen)>0? r2(invTotal/pnum(P.invMen)) : 0;
+  let sezonGada=0, sezonMen=0; const sezon=[];
+  d.sezon.forEach(x=>{
+    const a=area(x); const gada=r2(a*pnum(x.cena)*pnum(x.reizes)); const men=r2(gada/12);
+    rowCalc[x.id]={area:a,gada,men};
+    if(!x.on) return;
+    sezonGada+=gada; sezonMen+=men;
+    sezon.push({nosaukums:x.nosaukums,area:a,cena:pnum(x.cena),reizes:pnum(x.reizes),gada,men});
+  });
+  sezonGada=r2(sezonGada); sezonMen=r2(sezonMen);
+  const transp=r2(pnum(P.transports));
+  const tiesas=r2(algaA+algaS+atv+vsaoi+materiali+inv+sezonMen+transp);
+  const netiesas=r2(tiesas*pnum(P.netiesas)), nepar=r2(tiesas*pnum(P.nepar));
+  const pasizm=r2(tiesas+netiesas+nepar);
+  const pelna=r2(pasizm*pnum(P.pelna));
+  const bezPVN=r2(pasizm+pelna);
+  const pvn=r2(bezPVN*pnum(P.pvn));
+  const arPVN=r2(bezPVN+pvn);
+  const minH = pnum(P.stundas)>0 ? pnum(P.minAlga)/pnum(P.stundas) : 0;
+  const minOkA = pnum(P.likmeA) >= minH - 1e-9, minOkS = pnum(P.likmeS) >= minH - 1e-9;
+  const L=(nr,name,men,o)=>Object.assign({nr,name,men:r2(men),gada:r2(men*12),dala: bezPVN? men/bezPVN : 0},o||{});
+  const lines=[
+    L('1.1.','Apkopējas darba alga',algaA), L('1.2.','Sētnieka darba alga',algaS),
+    L('1.3.','Atvaļinājuma rezerve',atv), L('1.4.','Darba devēja VSAOI',vsaoi),
+    L('1.5.','Materiāli un ķīmija',materiali), L('1.6.','Inventāra nolietojums',inv),
+    L('1.7.','Sezonālie darbi',sezonMen), L('1.8.','Transports un sakari',transp),
+    L('','Tiešās izmaksas kopā',tiesas,{bold:true}),
+    L('2.','Netiešās izmaksas (administrācija)',netiesas), L('3.','Neparedzētie izdevumi',nepar),
+    L('','Pašizmaksa',pasizm,{bold:true})
+  ];
+  let n=4;
+  if(pelna) lines.push(L((n++)+'.','Peļņa',pelna));
+  lines.push(L('','Cena bez PVN',bezPVN,{bold:true}));
+  lines.push(Object.assign(L((n++)+'.','PVN',pvn),{dala:pnum(P.pvn)}));
+  lines.push(Object.assign(L('','CENA AR PVN',arPVN,{bold:true,total:true}),{dala:null}));
+  return {areas,fullA,fullS,hA,hS,algaA,algaS,darbi,darbiCost,sezon,sezonGada,sezonMen,invTotal,invIekT,invPagT,inv,
+          materiali,tiesas,netiesas,nepar,pasizm,pelna,bezPVN,pvn,arPVN,minH,minOkA,minOkS,minOk:minOkA&&minOkS,lines,rowCalc};
+}
+
+/* ================== Pieteikšanās ================== */
+async function boot(){
+  S.token = LS.get('budzets_token');
+  if(S.token){
+    try{ S.user = await run('whoami', S.token); return goHome(); } catch(e){ S.token=null; }
+  }
+  showLogin();
+}
+async function showLogin(){
+  show('vLogin'); $('#userChip').classList.add('hidden'); $('#backBtn').classList.add('hidden'); $('#subTitle').textContent='';
+  try{
+    const names = await run('getLoginNames');
+    const last = LS.get('budzets_last') || '';
+    $('#lgName').innerHTML = names.map(n=>`<option ${n.name===last?'selected':''} value="${esc(n.name)}">${esc(n.name)} · ${roleLabel(n.role)}</option>`).join('');
+  }catch(e){ toast(e.message,true); }
+}
+async function doLogin(){
+  const name=$('#lgName').value, pin=$('#lgPin').value;
+  if(!pin) return toast('Ievadi PIN', true);
+  try{
+    const r = await busy(run('login', name, pin));
+    S.token=r.token; S.user={name:r.name, role:r.role};
+    LS.set('budzets_token', r.token); LS.set('budzets_last', r.name); $('#lgPin').value='';
+    goHome();
+  }catch(e){ toast(e.message.replace(/^Error: /,''), true); }
+}
+function logoutLocal(){ LS.del('budzets_token'); S.token=null; S.user=null; showLogin(); }
+async function doLogout(){ try{ await run('logout', S.token); }catch(e){} closeOv(); logoutLocal(); }
+function openUserSheet(){
+  sheet(`<h3>${esc(S.user.name)}</h3><p class="muted" style="margin-top:-6px">Profils: <b>${roleLabel(S.user.role)}</b></p>
+    <p class="small muted">${isMgmt()?'Vadības profils redz visus budžetus (arī vēsturiskās versijas), var apstiprināt vai noraidīt.':''}
+    ${isMaker()?' Gatavotājs veido un labo savus budžetus, iesniedz tos vadībai.':''}</p>
+    <div class="row" style="margin-top:14px"><button class="btn bad" onclick="doLogout()">Iziet</button><span style="flex:1"></span><button class="btn" onclick="closeOv()">Aizvērt</button></div>`);
+}
+
+/* ================== Saraksts ================== */
+function show(id){ ['vLogin','vHome','vEdit'].forEach(v=>$('#'+v).classList.toggle('hidden', v!==id)); $('#bar').classList.toggle('hidden', id!=='vEdit'); window.scrollTo(0,0); }
+async function goHome(force){
+  if(S.dirty && !force && !confirm('Ir nesaglabātas izmaiņas. Iziet bez saglabāšanas?')) return;
+  S.dirty=false; S.id=null; S.d=null; S.histVer=null;
+  show('vHome'); $('#backBtn').classList.add('hidden'); $('#subTitle').textContent = isMgmt() && !isMaker() ? '· Vadība' : '';
+  const chip=$('#userChip'); chip.classList.remove('hidden'); chip.textContent=S.user.name;
+  $('#vHome').innerHTML='<div class="empty">Ielādē…</div>';
+  try{ const r=await run('listBudgets', S.token); S.user=r.user; S.list=r.items; renderHome(); }
+  catch(e){ $('#vHome').innerHTML='<div class="empty">'+esc(e.message)+'</div>'; }
+}
+function filtered(){
+  const f=S.filter, q=f.q.trim().toLowerCase();
+  return S.list.filter(b=>{
+    if(S.user.role==='admin' && S.scope==='mine' && b.autors!==S.user.name) return false;
+    if(f.autors && b.autors!==f.autors) return false;
+    if(f.statuss && b.statuss!==f.statuss) return false;
+    if(f.gads && String(b.sagatavots||b.izveidots).slice(0,4)!==f.gads) return false;
+    if(f.statuss!=='Arhivēts' && !f.statuss && b.statuss==='Arhivēts' && !q) return false;
+    if(q && ![b.id,b.nosaukums,b.adrese,b.pasutitajs,b.autors].join(' ').toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function renderHome(){
+  const L=S.list, mg=isMgmt();
+  const authors=[...new Set(L.map(b=>b.autors))].sort();
+  const years=[...new Set(L.map(b=>String(b.sagatavots||b.izveidots).slice(0,4)).filter(Boolean))].sort().reverse();
+  const F=filtered();
+  const appr=F.filter(b=>b.statuss==='Apstiprināts');
+  const waiting=L.filter(b=>b.statuss==='Iesniegts').length;
+  let h='';
+  if(isMaker()) h+=`<div class="row" style="margin-bottom:12px"><button class="btn pri" onclick="newBudget()">＋ Jauns budžets</button>
+      <span style="flex:1"></span>${mg?`<button class="btn" onclick="exportList()">⬇ Saraksts Excel</button>`:''}</div>`;
+  else if(mg) h+=`<div class="row" style="margin-bottom:12px"><b style="font-size:17px;color:var(--pd)">Visi budžeti</b><span style="flex:1"></span><button class="btn" onclick="exportList()">⬇ Saraksts Excel</button></div>`;
+  if(S.user.role==='admin') h+=`<div class="seg"><button class="${S.scope==='all'?'on':''}" onclick="S.scope='all';renderHome()">Visi</button><button class="${S.scope==='mine'?'on':''}" onclick="S.scope='mine';renderHome()">Mani</button></div>`;
+  if(mg){
+    h+=`<div class="kpis">
+      <div class="kpi"><div class="l">Budžeti (filtrā)</div><div class="v">${F.length}</div></div>
+      <div class="kpi"><div class="l">Gaida izskatīšanu</div><div class="v">${waiting}</div></div>
+      <div class="kpi"><div class="l">Apstiprināti / mēn. ar PVN</div><div class="v">${eur(appr.reduce((s,b)=>s+b.arPVN,0))}</div></div>
+      <div class="kpi"><div class="l">Apstiprināti / gadā ar PVN</div><div class="v">${eur(appr.reduce((s,b)=>s+b.arPVN,0)*12)}</div></div></div>`;
+  }
+  h+=`<div class="filters">
+    <input class="in" placeholder="Meklēt: objekts, adrese, ID…" value="${esc(S.filter.q)}" oninput="S.filter.q=this.value;renderListOnly()">
+    ${mg?`<select class="in" onchange="S.filter.autors=this.value;renderHome()"><option value="">Visi autori</option>${authors.map(a=>`<option ${a===S.filter.autors?'selected':''}>${esc(a)}</option>`).join('')}</select>`:'<span></span>'}
+    <select class="in" onchange="S.filter.statuss=this.value;renderHome()"><option value="">Visi statusi</option>${['Melnraksts','Iesniegts','Apstiprināts','Noraidīts','Arhivēts'].map(s=>`<option ${s===S.filter.statuss?'selected':''}>${s}</option>`).join('')}</select>
+    <select class="in" onchange="S.filter.gads=this.value;renderHome()"><option value="">Visi gadi</option>${years.map(y=>`<option ${y===S.filter.gads?'selected':''}>${y}</option>`).join('')}</select>
+  </div><div id="budList"></div>`;
+  $('#vHome').innerHTML=h; renderListOnly();
+}
+function renderListOnly(){
+  const F=filtered();
+  $('#budList').innerHTML = F.length ? F.map(b=>`<div class="bud" onclick="openBudget('${esc(b.id)}')">
+      <div class="m"><div class="t1">${esc(b.nosaukums||b.adrese||'(bez nosaukuma)')}</div>
+      <div class="t2">${esc(b.id)} · ${esc(b.adrese||'')}${b.pasutitajs?' · '+esc(b.pasutitajs):''}</div>
+      <div class="t2"><span class="pill st-${esc(b.statuss)}">${esc(b.statuss)}</span> &nbsp;${esc(b.autors)} · v${b.versija} · ${lvDate(b.atjaunots)}</div></div>
+      <div class="pr">${eur(b.arPVN)}<small>mēn. ar PVN</small></div></div>`).join('')
+    : `<div class="empty">${S.list.length?'Nekas neatbilst filtram.':(isMaker()?'Vēl nav neviena budžeta. Spied «＋ Jauns budžets».':'Vēl nav neviena budžeta.')}</div>`;
+}
+async function exportList(){
+  try{ const r=await busy(run('exportListXlsx', S.token, filtered().map(b=>b.id))); download(r); }catch(e){ toast(e.message,true); }
+}
+
+/* ================== Redaktors ================== */
+function newBudget(){ S.id=null; S.meta={statuss:'Melnraksts',autors:S.user.name,versija:0}; S.d=blankBudget(); S.ro=false; S.tab='objekts'; S.dirty=false; S.histVer=null; openEditor(); }
+async function openBudget(id, versija){
+  try{
+    const r = await busy(versija? run('getVersion', S.token, id, versija) : run('getBudget', S.token, id));
+    S.id=id; S.meta=r.meta; S.d=migrate(r.data); S.histVer=versija||null; S.dirty=false;
+    const own = r.meta.autors===S.user.name;
+    S.ro = !!versija || !isMaker() || (!own && S.user.role!=='admin') || (r.meta.statuss==='Apstiprināts' && S.user.role!=='admin') || r.meta.statuss==='Arhivēts';
+    S.tab = S.ro ? 'tame' : (S.tab||'objekts');
+    openEditor();
+  }catch(e){ toast(e.message,true); }
+}
+function migrate(d){ const b=blankBudget(); d=d||{}; ['objekts','param'].forEach(k=>d[k]=Object.assign({},b[k],d[k]||{})); ['telpas','darbi','sezon','invIek','invPag'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=b[k]; d[k].forEach(x=>{ if(!x.id) x.id=uid(); }); }); return d; }
+function copyBudget(){
+  const d=JSON.parse(JSON.stringify(S.d)); d.objekts.sagatavots=isoToday(); d.objekts.derigs=isoToday(1);
+  d.objekts.nosaukums=(d.objekts.nosaukums||'')+' (kopija)';
+  S.id=null; S.meta={statuss:'Melnraksts',autors:S.user.name,versija:0}; S.d=d; S.ro=false; S.histVer=null; S.dirty=true; S.tab='objekts'; openEditor(); toast('Izveidota kopija — saglabā, lai paliek');
+}
+function openEditor(){
+  show('vEdit'); $('#backBtn').classList.remove('hidden');
+  $('#subTitle').textContent = S.id ? '· '+S.id+(S.histVer?' (v'+S.histVer+')':'') : '· Jauns';
+  renderEditor();
+}
+const TABS=[['objekts','Objekts'],['platibas','Platības'],['darbi','Darbi'],['sezon','Sezonālie'],['inv','Inventārs'],['param','Parametri'],['tame','Tāme']];
+function setTab(t){ S.tab=t; renderEditor(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+function renderEditor(){
+  const c=calc(S.d); S.c=c;
+  const m=S.meta||{};
+  let h='';
+  if(S.histVer) h+=`<div class="alert info">Skaties vēsturisko versiju <b>v${S.histVer}</b>. <a href="#" onclick="openBudget('${esc(S.id)}');return false">Atvērt aktuālo</a></div>`;
+  if(m.statuss==='Noraidīts' && m.komentars) h+=`<div class="alert warn"><b>Vadība noraidīja</b> (${esc(m.izskatija||'')}): ${esc(m.komentars)}</div>`;
+  if(m.statuss==='Apstiprināts') h+=`<div class="alert ok"><b>Apstiprināts</b> ${m.izskatija?'· '+esc(m.izskatija):''}${m.komentars?' — '+esc(m.komentars):''}</div>`;
+  if(!c.minOk) h+=`<div class="alert warn">⚠ Bruto likme zem minimālās algas (${eur(c.minH)}/h). Pārbaudi parametrus.</div>`;
+  h+=`<div class="tabs">${TABS.map(t=>`<button class="tab ${S.tab===t[0]?'on':''}" onclick="setTab('${t[0]}')">${t[1]}</button>`).join('')}</div>`;
+  h+=`<div id="pane" class="${S.ro?'ro':''}">${PANES[S.tab](c)}</div>`;
+  $('#vEdit').innerHTML=h;
+  if(S.ro) $('#vEdit').querySelectorAll('#pane input,#pane select,#pane textarea').forEach(e=>{ e.readOnly=true; if(e.tagName==='SELECT'||e.type==='checkbox'||e.type==='date') e.disabled=true; });
+  renderBar(c);
+}
+function renderBar(c){
+  $('#barPrice').textContent=eur(c.arPVN);
+  const m=S.meta||{}, own=m.autors===S.user.name, b=[];
+  if(!S.ro){ b.push(`<button class="btn pri" onclick="save()">Saglabāt</button>`);
+    if(S.id && (m.statuss==='Melnraksts'||m.statuss==='Noraidīts')) b.push(`<button class="btn dark" onclick="submitB()">Iesniegt</button>`); }
+  if(S.id && isMgmt() && !S.histVer && m.statuss!=='Melnraksts'){
+    if(m.statuss!=='Apstiprināts') b.push(`<button class="btn ok" onclick="decide('Apstiprināts')">Apstiprināt</button>`);
+    if(m.statuss!=='Noraidīts' && m.statuss!=='Arhivēts') b.push(`<button class="btn bad" onclick="decide('Noraidīts')">Noraidīt</button>`);
+  }
+  b.push(`<button class="btn" onclick="moreSheet()">⋯</button>`);
+  $('#barActs').innerHTML=b.join('');
+}
+function moreSheet(){
+  const m=S.meta||{}, own=m.autors===S.user.name;
+  sheet(`<h3>${esc(S.d.objekts.nosaukums||'Budžets')}</h3>
+    <div class="grid" style="gap:8px">
+      <button class="btn" onclick="closeOv();exp('pdf')">⬇ Eksportēt PDF</button>
+      <button class="btn" onclick="closeOv();exp('xlsx')">⬇ Eksportēt Excel</button>
+      ${S.id?`<button class="btn" onclick="closeOv();versions()">🕘 Versiju vēsture</button>`:''}
+      ${isMaker()?`<button class="btn" onclick="closeOv();copyBudget()">⧉ Izveidot kopiju (jauns budžets)</button>`:''}
+      ${S.id && isMgmt() && m.statuss!=='Arhivēts' && !S.histVer?`<button class="btn" onclick="closeOv();decide('Arhivēts')">Arhivēt</button>`:''}
+      ${S.id && !S.histVer && ((own&&m.statuss==='Melnraksts')||S.user.role==='admin')?`<button class="btn bad" onclick="closeOv();delB()">Dzēst budžetu</button>`:''}
+    </div>
+    ${S.id?`<p class="small muted" style="margin-top:14px">${esc(S.id)} · autors ${esc(m.autors)} · v${m.versija} · <span class="pill st-${esc(m.statuss)}">${esc(m.statuss)}</span></p>`:''}
+    <div class="row" style="margin-top:10px"><span style="flex:1"></span><button class="btn" onclick="closeOv()">Aizvērt</button></div>`);
+}
+
+/* ---- ievade ---- */
+function getP(path){ return path.split('.').reduce((o,k)=>o==null?o:o[k], S.d); }
+function setP(path,v){ const ks=path.split('.'); const last=ks.pop(); const o=ks.reduce((o,k)=>o[k],S.d); o[last]=v; }
+function onIn(el, rerender){
+  const p=el.dataset.p; let v;
+  if(el.type==='checkbox') v=el.checked;
+  else if(el.dataset.t==='n') v=pnum(el.value);
+  else if(el.dataset.t==='pct') v=pnum(el.value)/100;
+  else v=el.value;
+  setP(p,v); S.dirty=true;
+  if(rerender) return renderEditor();
+  const c=calc(S.d); S.c=c; renderBar(c); updOut(c);
+}
+function updOut(c){
+  document.querySelectorAll('[data-o]').forEach(el=>{ const f=OUT[el.dataset.o]; if(f) el.innerHTML=f(c, el.dataset.k); });
+}
+const OUT={
+  h:(c,k)=>nfmt(c.rowCalc[k]?.h,1)+' h', cost:(c,k)=>eur(c.rowCalc[k]?.cost), area:(c,k)=>nfmt(c.rowCalc[k]?.area)+' m²',
+  gada:(c,k)=>eur(c.rowCalc[k]?.gada), men:(c,k)=>eur(c.rowCalc[k]?.men),
+  iek:c=>nfmt(c.areas.iek)+' m²', ter:c=>nfmt(c.areas.ter)+' m²', cieti:c=>nfmt(c.areas.cieti)+' m²', zale:c=>nfmt(c.areas.zale)+' m²', logi:c=>nfmt(c.areas.logi)+' m²',
+  darbiSum:c=>`${nfmt(r1(c.hA+c.hS),1)} h · ${eur(c.darbiCost)}`, sezSum:c=>`${eur(c.sezonGada)} gadā · ${eur(c.sezonMen)} mēn.`,
+  invI:c=>eur(c.invIekT), invP:c=>eur(c.invPagT), inv:c=>`${eur(c.invTotal)} ÷ ${S.d.param.invMen} mēn. = <b>${eur(c.inv)}</b> mēnesī`,
+  fullA:c=>eur(c.fullA)+' / h', fullS:c=>eur(c.fullS)+' / h',
+  minC:c=>c.minOk?'<span style="color:var(--ok)">✓ atbilst</span>':'<span style="color:var(--warn)">⚠ zem min. algas</span>'
+};
+const inp=(p,o={})=>{ const v=getP(p); const t=o.t||'';
+  const val = t==='n'? nfmt(v) : t==='pct'? nfmt(r2((+v||0)*10000)/100) : (v==null?'':v);
+  return `<input class="in ${t?'num':''} ${o.cls||''}" data-p="${p}" ${t?`data-t="${t}" inputmode="decimal"`:''} ${o.type?`type="${o.type}"`:''} value="${esc(val)}" placeholder="${esc(o.ph||'')}" oninput="onIn(this)" ${o.ch?`onchange="onIn(this,true)"`:''}>`; };
+const fld=(label,html,extra)=>`<div><label class="f">${label}</label>${html}${extra?`<div class="small muted" style="margin-top:3px">${extra}</div>`:''}</div>`;
+function srcOptions(sel){
+  const o=[['','Ievadīt m² manuāli'],['iek','Koplietošanas iekštelpas kopā'],['cieti','Cietie segumi kopā'],['zale','Zālāji kopā'],['ter','Teritorija kopā'],['logi','Logi (aprēķins)'],['atkr','Atkritumu laukums']];
+  S.d.telpas.forEach(z=>o.push(['z:'+z.id,'Zona: '+(z.nosaukums||'—')]));
+  return o.map(a=>`<option value="${a[0]}" ${a[0]===(sel||'')?'selected':''}>${esc(a[1])}</option>`).join('');
+}
+function addRow(list){
+  const n={ telpas:{id:uid(),nosaukums:'',tips:'iek',m2:0},
+    darbi:{id:uid(),on:true,nosaukums:'',zona:'iekštelpas',izp:'Apkopēja',src:'',m2:0,reizes:1,raziba:100},
+    sezon:{id:uid(),on:true,nosaukums:'',src:'',m2:0,cena:0,reizes:1},
+    invIek:{id:uid(),on:true,nosaukums:'',apraksts:'',cena:0}, invPag:{id:uid(),on:true,nosaukums:'',apraksts:'',cena:0} }[list];
+  S.d[list].push(n); S.dirty=true; renderEditor();
+}
+function delRow(list,i){ S.d[list].splice(i,1); S.dirty=true; renderEditor(); }
+function setTips(i,v){ S.d.telpas[i].tips=v; S.dirty=true; renderEditor(); }
+
+const PANES={
+  objekts(){ const o='objekts.';
+    return `<div class="card"><h3>Objekts</h3><div class="grid g2">
+      ${fld('Nosaukums',inp(o+'nosaukums',{ph:'piem. Hipokrāta 24A (53 dzīvokļi)',cls:'cream'}))}
+      ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga',cls:'cream'}))}
+      ${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas',cls:'cream'}))}
+      ${fld('Izpildītājs',inp(o+'izpilditajs',{cls:'cream'}))}
+      ${fld('Sagatavots',inp(o+'sagatavots',{type:'date',cls:'cream'}))}
+      ${fld('Derīgs līdz',inp(o+'derigs',{type:'date',cls:'cream'}))}
+      ${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}
+      ${fld('Lietderīgā platība (Pl), m²',inp(o+'lietderiga',{t:'n'}),'dzīvokļu iekštelpu platība bez balkoniem')}
+      </div><div style="height:10px"></div>
+      ${fld('Piezīmes',`<textarea class="in" rows="3" data-p="objekts.piezimes" oninput="onIn(this)">${esc(S.d.objekts.piezimes||'')}</textarea>`)}</div>
+      <div class="alert info">Aizpildi pa kārtai: <b>Platības</b> → <b>Darbi</b> → <b>Sezonālie</b> → <b>Inventārs</b>. Parametri jau ir ar 2026. gada noklusējumiem. Gala cena — cilnē <b>Tāme</b> un apakšējā joslā.</div>`;
+  },
+  platibas(c){
+    const row=(z,i)=>`<div class="item" style="grid-template-columns:1fr"><div class="body">
+      <div class="line1">${inp(`telpas.${i}.nosaukums`,{ph:'Zonas nosaukums',ch:1})}<button class="x" title="Dzēst" onclick="delRow('telpas',${i})">×</button></div>
+      <div class="fields"><div><label class="f">Tips</label><select class="in" onchange="setTips(${i},this.value)">
+        <option value="iek" ${z.tips==='iek'?'selected':''}>Koplietošanas iekštelpa</option>
+        <option value="cieti" ${z.tips==='cieti'?'selected':''}>Teritorija — cietie segumi</option>
+        <option value="zale" ${z.tips==='zale'?'selected':''}>Teritorija — zālāji / apstādījumi</option></select></div>
+        <div><label class="f">Platība, m²</label>${inp(`telpas.${i}.m2`,{t:'n'})}</div></div></div></div>`;
+    const grp=(t,title)=>S.d.telpas.map((z,i)=>z.tips===t||(t==='ter'&&z.tips!=='iek')?row(z,i):'').join('');
+    return `<div class="card"><h3>Koplietošanas iekštelpas<span class="sp"></span><span class="small" data-o="iek">${OUT.iek(c)}</span></h3>
+      <div class="items">${grp('iek')}</div><div style="height:8px"></div><button class="btn ghost add" onclick="addRow('telpas')">＋ Pievienot zonu</button></div>
+      <div class="card"><h3>Teritorija (zeme)<span class="sp"></span><span class="small" data-o="ter">${OUT.ter(c)}</span></h3>
+      <div class="items">${grp('ter')}</div>
+      <div class="row small muted" style="margin-top:8px">Cietie segumi: <b data-o="cieti">${OUT.cieti(c)}</b> · Zālāji: <b data-o="zale">${OUT.zale(c)}</b></div></div>
+      <div class="card"><h3>Papildu platības</h3><div class="grid g3">
+        ${fld('Logu daļa no iekštelpām, %',inp('param.logiDala',{t:'pct'}),'Logi = <b data-o="logi">'+OUT.logi(c)+'</b>')}
+        ${fld('Atkritumu konteineru laukums, m²',inp('param.atkritumi',{t:'n'}),'nojume (aplēse)')}
+        ${fld('Pazemes stāvvieta, m²',inp('param.stavvieta',{t:'n'}))}</div></div>`;
+  },
+  darbi(c){
+    const it=(w,i)=>`<div class="item ${w.on?'':'off'}"><input type="checkbox" class="chk" data-p="darbi.${i}.on" ${w.on?'checked':''} onchange="onIn(this,true)">
+      <div class="body"><div class="line1">${inp(`darbi.${i}.nosaukums`,{ph:'Darba nosaukums'})}<button class="x" onclick="delRow('darbi',${i})">×</button></div>
+      <div class="fields">
+        <div><label class="f">Izpildītājs</label><select class="in" data-p="darbi.${i}.izp" onchange="onIn(this,true)"><option ${w.izp==='Apkopēja'?'selected':''}>Apkopēja</option><option ${w.izp==='Sētnieks'?'selected':''}>Sētnieks</option></select></div>
+        <div><label class="f">Zona</label><select class="in" data-p="darbi.${i}.zona" onchange="onIn(this,true)"><option ${w.zona==='iekštelpas'?'selected':''}>iekštelpas</option><option ${w.zona==='teritorija'?'selected':''}>teritorija</option></select></div>
+        <div style="grid-column:span 2"><label class="f">Platība no</label><select class="in" data-p="darbi.${i}.src" onchange="onIn(this,true)">${srcOptions(w.src)}</select></div>
+        ${w.src?`<div><label class="f">Platība, m²</label><div class="in num" style="background:#faf9fb" data-o="area" data-k="${w.id}">${OUT.area(c,w.id)}</div></div>`:`<div><label class="f">Platība, m²</label>${inp(`darbi.${i}.m2`,{t:'n'})}</div>`}
+        <div><label class="f">Reizes mēnesī</label>${inp(`darbi.${i}.reizes`,{t:'n'})}</div>
+        <div><label class="f">Ražība, m²/h</label>${inp(`darbi.${i}.raziba`,{t:'n'})}</div>
+      </div>
+      <div class="res"><span data-o="h" data-k="${w.id}">${OUT.h(c,w.id)}</span><b data-o="cost" data-k="${w.id}">${OUT.cost(c,w.id)}</b></div></div></div>`;
+    const g=z=>S.d.darbi.map((w,i)=>w.zona===z?it(w,i):'').join('');
+    return `<div class="alert info small">Stundas = platība × reizes ÷ ražība × (1 + neproduktīvais laiks ${pct(S.d.param.neprod,0)}), noapaļo līdz 0,1 h. Izmaksas = stundas × pilnā stundas cena (apkopēja <span data-o="fullA">${OUT.fullA(c)}</span>, sētnieks <span data-o="fullS">${OUT.fullS(c)}</span>).</div>
+      <div class="card"><h3>Iekštelpas</h3><div class="items">${g('iekštelpas')}</div></div>
+      <div class="card"><h3>Teritorija</h3><div class="items">${g('teritorija')}</div>
+      <div style="height:8px"></div><button class="btn ghost add" onclick="addRow('darbi')">＋ Pievienot darbu</button>
+      <div class="sum"><span>Kopā (atzīmētie)</span><span data-o="darbiSum">${OUT.darbiSum(c)}</span></div></div>`;
+  },
+  sezon(c){
+    const it=(x,i)=>`<div class="item ${x.on?'':'off'}"><input type="checkbox" class="chk" data-p="sezon.${i}.on" ${x.on?'checked':''} onchange="onIn(this,true)">
+      <div class="body"><div class="line1">${inp(`sezon.${i}.nosaukums`,{ph:'Sezonālais darbs'})}<button class="x" onclick="delRow('sezon',${i})">×</button></div>
+      <div class="fields">
+        <div style="grid-column:span 2"><label class="f">Platība / daudzums no</label><select class="in" data-p="sezon.${i}.src" onchange="onIn(this,true)">${srcOptions(x.src).replace('Ievadīt m² manuāli','Ievadīt manuāli (m² vai gab.)')}</select></div>
+        ${x.src?`<div><label class="f">Platība</label><div class="in num" style="background:#faf9fb" data-o="area" data-k="${x.id}">${OUT.area(c,x.id)}</div></div>`:`<div><label class="f">m² / gab.</label>${inp(`sezon.${i}.m2`,{t:'n'})}</div>`}
+        <div><label class="f">Cena reizē, €/m² vai €/gab.</label>${inp(`sezon.${i}.cena`,{t:'n'})}</div>
+        <div><label class="f">Reizes gadā</label>${inp(`sezon.${i}.reizes`,{t:'n'})}</div>
+      </div>
+      <div class="res"><span>gadā <span data-o="gada" data-k="${x.id}">${OUT.gada(c,x.id)}</span></span><b data-o="men" data-k="${x.id}">${OUT.men(c,x.id)}</b></div></div></div>`;
+    return `<div class="card"><h3>Sezonālie darbi</h3><div class="items">${S.d.sezon.map(it).join('')}</div>
+      <div style="height:8px"></div><button class="btn ghost add" onclick="addRow('sezon')">＋ Pievienot darbu</button>
+      <div class="sum"><span>Kopā</span><span data-o="sezSum">${OUT.sezSum(c)}</span></div></div>`;
+  },
+  inv(c){
+    const lst=(k,title,o)=>`<div class="card"><h3>${title}<span class="sp"></span><span class="small" data-o="${o}">${OUT[o](c)}</span></h3><div class="items">
+      ${S.d[k].map((x,i)=>`<div class="item ${x.on?'':'off'}"><input type="checkbox" class="chk" data-p="${k}.${i}.on" ${x.on?'checked':''} onchange="onIn(this,true)">
+        <div class="body"><div class="line1">${inp(`${k}.${i}.nosaukums`,{ph:'Pozīcija'})}<button class="x" onclick="delRow('${k}',${i})">×</button></div>
+        <div class="fields" style="grid-template-columns:1fr 120px">${inp(`${k}.${i}.apraksts`,{ph:'Apraksts'})}${inp(`${k}.${i}.cena`,{t:'n',ph:'€'})}</div></div></div>`).join('')}
+      </div><div style="height:8px"></div><button class="btn ghost add" onclick="addRow('${k}')">＋ Pievienot</button></div>`;
+    return lst('invIek','Iekštelpu uzkopšanai','invI')+lst('invPag','Pagalma uzkopšanai','invP')+
+      `<div class="card"><div class="grid g2">${fld('Inventāra nolietojums, mēn.',inp('param.invMen',{t:'n'}),'inventāru sadala uz N mēnešiem')}
+      <div><label class="f">Nolietojums tāmē</label><div class="in" style="background:var(--pl)" data-o="inv">${OUT.inv(c)}</div></div></div></div>`;
+  },
+  param(c){ const p='param.';
+    return `<div class="card"><h3>Darba samaksa</h3><div class="grid g3">
+      ${fld('Apkopējas bruto likme, €/h',inp(p+'likmeA',{t:'n'}))}
+      ${fld('Sētnieka bruto likme, €/h',inp(p+'likmeS',{t:'n'}))}
+      ${fld('Minimālā alga, €/mēn.',inp(p+'minAlga',{t:'n'}),'MK noteiktā minimālā mēneša alga')}
+      ${fld('Darba stundas mēnesī',inp(p+'stundas',{t:'n'}),'pilna slodze (40 h nedēļā)')}
+      ${fld('Atvaļinājuma rezerve, %',inp(p+'atv',{t:'pct'}),'1 mēnesis no 12')}
+      ${fld('Darba devēja VSAOI, %',inp(p+'vsaoi',{t:'pct'}))}
+      </div><div style="height:10px"></div>
+      <div class="kv"><span>Pilnā stundas cena — apkopēja</span><b data-o="fullA">${OUT.fullA(c)}</b></div>
+      <div class="kv"><span>Pilnā stundas cena — sētnieks</span><b data-o="fullS">${OUT.fullS(c)}</b></div>
+      <div class="kv"><span>Minimālās algas pārbaude</span><b data-o="minC">${OUT.minC(c)}</b></div></div>
+      <div class="card"><h3>Reālais darba laiks</h3><div class="grid g3">${fld('Neproduktīvais laiks, %',inp(p+'neprod',{t:'pct',ch:1}),'ceļš, pārģērbšanās, inventāra sagatavošana')}</div></div>
+      <div class="card"><h3>Citas izmaksas</h3><div class="grid g3">
+      ${fld('Materiāli — iekštelpas, €/m² mēn.',inp(p+'matIek',{t:'n'}),'ķīmija, maisi, papīrs')}
+      ${fld('Materiāli — teritorija, €/m² mēn.',inp(p+'matTer',{t:'n'}),'maisi, smiltis, sāls')}
+      ${fld('Transports un sakari, €/mēn.',inp(p+'transports',{t:'n'}),'degviela, telefons')}</div></div>
+      <div class="card"><h3>Uzcenojumi</h3><div class="grid g3">
+      ${fld('Netiešās izmaksas, %',inp(p+'netiesas',{t:'pct'}),'% no tiešajām izmaksām')}
+      ${fld('Neparedzētie izdevumi, %',inp(p+'nepar',{t:'pct'}),'% no tiešajām izmaksām')}
+      ${fld('Peļņa, %',inp(p+'pelna',{t:'pct'}),'% no pašizmaksas')}
+      ${fld('PVN, %',inp(p+'pvn',{t:'pct'}))}</div></div>`;
+  },
+  tame(c){ const o=S.d.objekts;
+    return `<div class="hero">
+      <div class="card"><h3>Objekts</h3>
+        ${[['Nosaukums',o.nosaukums],['Adrese',o.adrese],['Pasūtītājs',o.pasutitajs],['Sagatavots',lvDate(o.sagatavots)],['Derīgs līdz',lvDate(o.derigs)],['Izpildītājs',o.izpilditajs]]
+          .map(a=>`<div class="kv"><span>${a[0]}</span><b>${esc(a[1]||'—')}</b></div>`).join('')}</div>
+      <div class="card" style="background:var(--pll)"><h3>Rezultāts</h3>
+        <div class="muted small">Cena mēnesī ar PVN</div><div class="big">${eur(c.arPVN)}</div>
+        <div class="kv"><span>Cena mēnesī bez PVN</span><b>${eur(c.bezPVN)}</b></div>
+        <div class="kv"><span>Cena gadā ar PVN</span><b>${eur(c.arPVN*12)}</b></div>
+        <div class="kv"><span>Stundas mēnesī (apkopēja / sētnieks)</span><b>${nfmt(c.hA,1)} / ${nfmt(c.hS,1)} h</b></div>
+        ${S.d.objekts.lietderiga?`<div class="kv"><span>€ / m² Pl mēnesī ar PVN</span><b>${eur(c.arPVN/pnum(S.d.objekts.lietderiga)).replace('€','€')}</b></div>`:''}
+      </div></div>
+      <div class="card" style="padding:0;overflow:hidden"><div class="scroll" style="border:0;border-radius:0"><table class="t">
+        <tr><th>Nr.</th><th>Pozīcija (MK 408 — 1.1. Sanitārā apkope)</th><th class="r">Mēnesī</th><th class="r">Gadā</th><th class="r">Daļa</th></tr>
+        ${c.lines.map(l=>`<tr class="${l.total?'g':(l.bold?'b':'')}"><td class="nr">${l.nr}</td><td>${esc(l.name)}</td><td class="r">${eur(l.men)}</td><td class="r">${eur(l.gada)}</td><td class="r">${l.dala==null?'':pct(l.dala)}</td></tr>`).join('')}
+      </table></div></div>
+      <div class="row"><button class="btn" onclick="exp('pdf')">⬇ PDF</button><button class="btn" onclick="exp('xlsx')">⬇ Excel</button>${S.id?`<button class="btn" onclick="versions()">🕘 Vēsture</button>`:''}</div>`;
+  }
+};
+
+/* ---- darbības ---- */
+function validate(){
+  const o=S.d.objekts;
+  if(!(o.nosaukums||'').trim() && !(o.adrese||'').trim()){ setTab('objekts'); toast('Ievadi objekta nosaukumu vai adresi', true); return false; }
+  return true;
+}
+async function save(statuss, piezime){
+  if(!validate()) return;
+  const c=calc(S.d); const calcOut=Object.assign({},c); delete calcOut.rowCalc;
+  try{
+    const r=await busy(run('saveBudget', S.token, {id:S.id, data:S.d, calc:calcOut, statuss:statuss||null, piezime:piezime||''}));
+    S.id=r.id; S.meta=Object.assign({},S.meta,{id:r.id,versija:r.versija,statuss:r.statuss,autors:S.meta.autors||S.user.name});
+    S.dirty=false; toast(statuss==='Iesniegts'?'Iesniegts vadībai ✓':'Saglabāts ✓ (v'+r.versija+')');
+    $('#subTitle').textContent='· '+S.id; renderEditor();
+  }catch(e){ toast(e.message,true); }
+}
+async function submitB(){
+  sheet(`<h3>Iesniegt vadībai</h3><p class="muted small">Budžets tiks saglabāts un nodots vadībai izskatīšanai.</p>
+    <label class="f">Piezīme vadībai (nav obligāta)</label><textarea class="in" id="subNote" rows="3"></textarea>
+    <div class="row" style="margin-top:12px"><span style="flex:1"></span><button class="btn" onclick="closeOv()">Atcelt</button>
+    <button class="btn dark" onclick="const n=$('#subNote').value;closeOv();save('Iesniegts',n)">Iesniegt</button></div>`);
+}
+function decide(st){
+  const label={'Apstiprināts':'Apstiprināt','Noraidīts':'Noraidīt','Arhivēts':'Arhivēt'}[st];
+  sheet(`<h3>${label} budžetu</h3><p class="muted small">${esc(S.d.objekts.nosaukums||'')} · ${eur(S.c.arPVN)} mēn. ar PVN</p>
+    <label class="f">Komentārs ${st==='Noraidīts'?'(ieteicams — ko labot)':'(nav obligāts)'}</label><textarea class="in" id="decNote" rows="3"></textarea>
+    <div class="row" style="margin-top:12px"><span style="flex:1"></span><button class="btn" onclick="closeOv()">Atcelt</button>
+    <button class="btn ${st==='Noraidīts'?'bad':'ok'}" onclick="doDecide('${st}')">${label}</button></div>`);
+}
+async function doDecide(st){
+  const n=$('#decNote').value; closeOv();
+  try{ await busy(run('setStatus', S.token, S.id, st, n)); toast('Statuss: '+st); openBudget(S.id); }catch(e){ toast(e.message,true); }
+}
+async function delB(){
+  if(!confirm('Dzēst šo budžetu? Versiju vēsture paliks lapā «Versijas».')) return;
+  try{ await busy(run('deleteBudget', S.token, S.id)); S.dirty=false; toast('Dzēsts'); goHome(true); }catch(e){ toast(e.message,true); }
+}
+async function versions(){
+  try{
+    const v=await busy(run('getVersions', S.token, S.id));
+    sheet(`<h3>Versiju vēsture</h3>${v.map(x=>`<div class="ver"><div class="m"><b>v${x.versija}</b> · <span class="pill st-${esc(x.statuss)}">${esc(x.statuss)}</span>
+      <div class="small muted">${esc(String(x.laiks).replace('T',' ').slice(0,16))} · ${esc(x.lietotajs)}${x.piezime?' · '+esc(x.piezime):''}</div></div>
+      <div style="text-align:right"><b>${eur(x.arPVN)}</b>${x.irDati?`<div><button class="btn sm" onclick="closeOv();openBudget('${esc(S.id)}',${x.versija})">Atvērt</button></div>`:''}</div></div>`).join('')||'<p class="muted">Nav ierakstu.</p>'}
+      <div class="row" style="margin-top:12px"><span style="flex:1"></span><button class="btn" onclick="closeOv()">Aizvērt</button></div>`);
+  }catch(e){ toast(e.message,true); }
+}
+async function exp(kind){
+  const c=calc(S.d); const co=Object.assign({},c); delete co.rowCalc;
+  const meta={id:S.id||'',versija:S.histVer||(S.meta&&S.meta.versija)||'',autors:(S.meta&&S.meta.autors)||S.user.name,statuss:(S.meta&&S.meta.statuss)||'Melnraksts'};
+  try{ const r=await busy(run(kind==='pdf'?'exportPdf':'exportXlsx', S.token, S.id, S.d, co, meta)); download(r); }catch(e){ toast(e.message,true); }
+}
+function download(r){
+  const bin=atob(r.b64), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+  const url=URL.createObjectURL(new Blob([u8],{type:r.mime}));
+  const a=document.createElement('a'); a.href=url; a.download=r.name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 30000); toast('Lejupielādēts: '+r.name);
+}
+
+/* ---- sheet ---- */
+function sheet(html){ $('#ovRoot').innerHTML=`<div class="ov" onclick="if(event.target===this)closeOv()"><div class="sheet">${html}</div></div>`; }
+function closeOv(){ $('#ovRoot').innerHTML=''; }
+window.addEventListener('beforeunload', e=>{ if(S.dirty){ e.preventDefault(); e.returnValue=''; } });
+
+boot();
+</script>
+</body>
+</html>
