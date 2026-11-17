@@ -799,7 +799,7 @@ function startApp(){
   $('tabs').innerHTML='<span class="tab-ind" id="tabInd"></span>'+tabs.map(([id,l,ic])=>`<button class="tab" data-tab="${id}">${ic}<span>${l}</span><span class="count" id="cnt-${id}"></span></button>`).join('');
   $('tabs').onclick=(e)=>{ const b=e.target.closest('.tab'); if(b) switchView(b.dataset.tab); };
   switchView('list');
-  if(S.pendingKad){ const k=S.pendingKad; S.pendingKad=null; if(isMaker()){ newBudget(); kadImport(k); } else toast('Kadastra datus var ielikt tikai budžeta gatavotājs','err'); }
+  if(S.pendingKad){ const k=S.pendingKad; S.pendingKad=null; kadStart(k); }
 }
 function setTabsVisible(on){ $('tabs').hidden=!on; $('app').classList.toggle('no-tabs',!on); if(on) placeTabs(); }
 function switchView(v, force){
@@ -1210,7 +1210,7 @@ const PANES={
         <option value="gar" ${z.tips==='gar'?'selected':''}>Garāža / pazemes stāvvieta</option></select></div>
         ${fld('Platība, m²',inp(`telpas.${i}.m2`,{t:'n'}))}</div></div>`;
     const grp=t=>S.d.telpas.map((z,i)=>(t==='ter'?(z.tips==='cieti'||z.tips==='zale'):z.tips===t)?row(z,i):'').join('');
-    return vh('Platības','Koplietošanas telpas un teritorija — no tām rēķinās darbi.')+(S.ro?'':`<div class="card panel" style="margin-bottom:12px">${aiBtn()}</div>`)+
+    return vh('Platības','Koplietošanas telpas un teritorija — no tām rēķinās darbi.')+kadCard()+(S.ro?'':`<div class="card panel" style="margin-bottom:12px">${aiBtn()}</div>`)+
       `<div class="section-t">Koplietošanas iekštelpas <span data-o="iek">${OUT.iek(c)}</span></div>${grp('iek')}
       <div class="section-t">Teritorija <span data-o="ter">${OUT.ter(c)}</span></div>${grp('ter')}
       <div class="section-t">Garāža / pazemes stāvvieta <span data-o="gar">${OUT.gar(c)}</span></div>${grp('gar')}
@@ -1298,7 +1298,7 @@ function aiSheet(){
 }
 async function aiRun(){
   const t=$('aiText').value.trim(); if(t.length<20) return toast('Ielīmējiet kadastra datus','err');
-  if(/^SHBUDZETS\s*\{/.test(t)){ try{ const k=JSON.parse(t.replace(/^SHBUDZETS\s*/,'')); closeSheet(); return kadImport(k); }catch(e){ return toast('Neizdevās nolasīt SH Kadastrs datus','err'); } }
+  if(/^SHBUDZETS\s*[\[{]/.test(t)){ try{ const k=JSON.parse(t.replace(/^SHBUDZETS\s*/,'')); closeSheet(); return kadStart(k); }catch(e){ return toast('Neizdevās nolasīt SH Kadastrs datus','err'); } }
   const b=$('aiGo'); busyBtn(b,true);
   try{ const r=await api('aiKadastrs',{text:t}); closeSheet(); aiApply(r.ai||{}); }
   catch(err){ toast(netMsg(err),'err'); } finally{ busyBtn(b,false); }
@@ -1346,17 +1346,18 @@ function katRegex(n){ n=String(n).toLowerCase();
   if(/garāž|stāvviet/.test(n)) return 'garaza';
   if(/atkritum/.test(n)) return 'atkritumi';
   return 'cits'; }
-async function kadImport(k){
+async function kadImport(k, merge){
   if(!k || !Array.isArray(k.telpas)) return toast('Kadastra dati nav pilnīgi','err');
   toast('Ielieku kadastra datus…');
   const before=JSON.stringify(S.d), d=S.d, o=d.objekts, cat={};
   k.telpas.forEach(t=>cat[t.nosaukums]=t.ar?'arpus':katRegex(t.nosaukums));
   let viaAI=false;
   try{ const r=await api('aiTelpas',{nosaukumi:k.telpas.filter(t=>!t.ar).map(t=>t.nosaukums)}); (r.kat||[]).forEach(x=>{ if(x.nosaukums in cat && cat[x.nosaukums]!=='arpus') cat[x.nosaukums]=x.kategorija; }); viaAI=(r.kat||[]).length>0; }catch(e){}
-  const short=String(k.adrese||'').replace(/ iela /i,' ').split(',')[0];
+  const short=String(k.adrese||'').split(',')[0].replace(/\s+iela\s+/gi,' ');
   if(k.adrese) o.adrese=k.adrese; if(k.dzivokli) o.dzivokli=k.dzivokli; if(k.dzivoklu_m2) o.lietderiga=k.dzivoklu_m2;
   if(short) o.nosaukums=short+(k.dzivokli?` (${k.dzivokli} dzīvokļi)`:'');
-  o.piezimes=(o.piezimes?o.piezimes+'\n':'')+`Kadastrs.lv ${lvDate(isoToday())}: būve ${k.buve||''}, ${k.stavi||'?'} virszemes + ${k.pazemes||0} pazemes stāvi, kopējā platība ${nfmt(k.kopeja)} m², zeme ${nfmt(k.zeme_m2)} m².`;
+  o.piezimes=String(o.piezimes||'').replace(/^Kadastrs\.lv.*$\n?/gm,'').trim();
+  o.piezimes=(o.piezimes?o.piezimes+'\n':'')+`Kadastrs.lv ${lvDate(isoToday())}: ${k.multi?k.multi+' būves':'būve'} ${k.buve||''}, ${k.stavi||'?'} virszemes + ${k.pazemes||0} pazemes stāvi, kopējā platība ${nfmt(k.kopeja)} m², zeme ${nfmt(k.zeme_m2)} m².`;
   const sum=c=>k.telpas.filter(t=>cat[t.nosaukums]===c).reduce((s,t)=>s+(+t.m2||0),0);
   const iekZones=k.telpas.filter(t=>!['lifts','garaza'].includes(cat[t.nosaukums])).map(t=>({id:uid(),nosaukums:t.nosaukums+(t.skaits>1?` (${t.skaits} telpas)`:''),tips:'iek',m2:r1(t.m2)}));
   const garZ=k.telpas.filter(t=>cat[t.nosaukums]==='garaza').map(t=>({id:uid(),nosaukums:t.nosaukums,tips:'gar',m2:r1(t.m2)}));
@@ -1374,7 +1375,7 @@ async function kadImport(k){
   const kap=sum('kapnu')+sum('ratinu'), teh=sum('tehniskas'), atp=sum('atputas'), ar=sum('arpus'), sai=sum('saimniecibas');
   const iek=iekZones.reduce((s,z)=>s+z.m2,0);
   const liftRooms=k.telpas.filter(t=>cat[t.nosaukums]==='lifts').reduce((s,t)=>s+(t.skaits||1),0);
-  const lifti=liftRooms&&k.stavi ? Math.max(1,Math.round(liftRooms/((k.stavi||1)+(k.pazemes||0)))) : 0;
+  const lifti=k.lifti_est!=null ? k.lifti_est : (liftRooms&&k.stavi ? Math.max(1,Math.round(liftRooms/((k.stavi||1)+(k.pazemes||0)))) : 0);
   const set=(re,m2,on)=>d.darbi.forEach(w=>{ if(re.test(w.nosaukums)){ w.src=''; w.m2=r1(m2); if(on!=null) w.on=on; } });
   set(/^Kāpņu telpu/i,kap); set(/^Margu/i,kap); set(/^Tehnisko/i,teh,teh>0); set(/^Atpūtas/i,atp,atp>0); set(/^Koplietošanas terases/i,ar,ar>0);
   set(/^Ģenerālā/i,Math.max(0,iek-teh-ar-sai)); if(lifti) set(/^Lifta/i,lifti*2,true);
@@ -1382,9 +1383,53 @@ async function kadImport(k){
     if(!w){ w={id:uid(),on:true,nosaukums:'Saimniecības telpu / pagraba uzkopšana',zona:'iekštelpas',izp:'Apkopēja',src:'',m2:0,reizes:1,raziba:300}; const i=d.darbi.findIndex(x=>x.zona==='teritorija'); d.darbi.splice(i<0?d.darbi.length:i,0,w); }
     w.m2=r1(sai); w.on=true; }
   S.dirty=true;
-  S.aiUndo={prev:before, note:`Kadastrs: ${k.dzivokli||'?'} dzīvokļi, ${nfmt(k.dzivoklu_m2)} dzīvokļu m², ${iekZones.length} koplietošanas telpu veidi (${nfmt(r1(iek))} m²)${lifti?`, ~${lifti} ${plural(lifti,'lifts','lifti')}`:''}. ${viaAI?'AI sašķiroja telpas zonās.':'Telpas sašķirotas pēc nosaukumiem.'}${note}`};
-  S.sec='platibas'; renderEditor(); toast('Kadastra dati ielikti — pārbaudiet','ok');
+  S.aiUndo={prev:before, note:`Kadastrs${k.multi?' ('+k.multi+' būves)':''}: ${k.dzivokli||'?'} dzīvokļi, ${nfmt(k.dzivoklu_m2)} dzīvokļu m², ${iekZones.length} koplietošanas telpu veidi (${nfmt(r1(iek))} m²)${lifti?`, ~${lifti} ${plural(lifti,'lifts','lifti')}`:''}. ${viaAI?'AI sašķiroja telpas zonās.':'Telpas sašķirotas pēc nosaukumiem.'}${note}`};
+  S.sec='platibas'; renderEditor(); toast(merge?'Kadastrs pievienots budžetam — pārbaudiet':'Kadastra dati ielikti — pārbaudiet','ok');
 }
+/* Vairākas būves / dalīta māja */
+const kadList=(x)=>Array.isArray(x)?x:[x];
+const kadApb=(k)=>{ const fl=(k.stavi||0)+(k.pazemes||0); return k.apbuve || (k.kopeja&&fl ? Math.round(k.kopeja/fl) : 0); };
+const kadLifti=(k)=>{ const n=(k.telpas||[]).filter(t=>katRegex(t.nosaukums)==='lifts').reduce((s,t)=>s+(t.skaits||1),0); return n&&k.stavi ? Math.max(1,Math.round(n/((k.stavi||1)+(k.pazemes||0)))) : 0; };
+function kadCombine(list){
+  if(list.length===1) return Object.assign({},list[0]);
+  const telp={}; list.forEach(k=>(k.telpas||[]).forEach(t=>{ const x=telp[t.nosaukums]=telp[t.nosaukums]||{nosaukums:t.nosaukums,m2:0,skaits:0,ar:t.ar}; x.m2+=(+t.m2||0); x.skaits+=(t.skaits||1); }));
+  const zemes={}; list.forEach(k=>{ if(k.zeme_m2) zemes[k.zeme_apz||k.buve]=k.zeme_m2; });
+  const adr=[...new Set(list.map(k=>k.adrese).filter(Boolean))], city=adr.length?adr[0].split(',').slice(1).join(',').trim():'';
+  const S_=(f)=>list.reduce((s,k)=>s+(+k[f]||0),0), M_=(f)=>Math.max(0,...list.map(k=>+k[f]||0));
+  return { multi:list.length, buve:list.map(k=>k.buve).join(', '), adrese:adr.map(a=>a.split(',')[0]).join(' / ')+(city?', '+city:''),
+    kopeja:r1(S_('kopeja')), dzivoklu_m2:r1(S_('dzivoklu_m2')), dzivokli:S_('dzivokli'), stavi:M_('stavi'), pazemes:M_('pazemes'),
+    zeme_m2:Object.values(zemes).reduce((s,v)=>s+v,0), apbuve:list.reduce((s,k)=>s+kadApb(k),0), lifti_est:list.reduce((s,k)=>s+kadLifti(k),0),
+    telpas:Object.values(telp).map(t=>Object.assign(t,{m2:r1(t.m2)})).sort((a,b)=>b.m2-a.m2) };
+}
+async function kadStart(payload){
+  const list=kadList(payload).filter(k=>k&&Array.isArray(k.telpas));
+  if(!list.length) return toast('Kadastra dati nav pilnīgi','err');
+  if(!isMaker()) return toast('Kadastra datus var ielikt tikai budžeta gatavotājs','err');
+  S.kadPending=list;
+  let items=[]; try{ const r=await api('list'); items=(r.items||[]).filter(b=>(b.autors===S.user.name||S.user.role==='admin') && ['Melnraksts','Noraidīts','Iesniegts'].includes(b.statuss)); }catch(e){}
+  const open=S.view==='edit' && S.d && !S.ro;
+  const dz=list.reduce((s,k)=>s+(k.dzivokli||0),0);
+  openSheet(`<h3>Kadastra dati</h3><p class="lead">${list.length>1?list.length+' būves':'1 būve'} · ${esc(list.map(k=>k.adrese||k.buve).join('; '))} · ${dz} dzīvokļi</p>
+    <div class="menu"><button onclick="kadNew()">${IC.plus.replace('<svg','<svg class="i"')} Jauns budžets<span>›</span></button>
+    ${open?`<button onclick="kadAdd(null)">${IC.copy} Pievienot atvērtajam: ${esc(S.d.objekts.nosaukums||'budžets')}<span>›</span></button>`:''}
+    ${items.filter(b=>!(open&&b.id===S.id)).slice(0,8).map(b=>`<button onclick="kadAdd('${esc(b.id)}')">${IC.copy} Pievienot: ${esc(b.nosaukums||b.adrese||b.id)}<span>${esc(b.id)}</span></button>`).join('')}</div>
+    <p class="lead" style="margin-top:12px">Dalītai mājai: pirmo daļu ielieciet jaunā budžetā, nākamās daļas (cits kadastra apzīmējums) — «Pievienot…». Dzīvokļi, m², telpas un zeme saskaitīsies.</p>
+    <button class="btn btn-glass btn-block" onclick="closeSheet()">Atcelt</button>`);
+}
+function kadNew(){ const list=S.kadPending; S.kadPending=null; closeSheet(); if(!list) return; S.dirty=false; S.view='list'; newBudget(); S.d.kadastri=list; kadImport(kadCombine(list)); }
+async function kadAdd(id){
+  const list=S.kadPending; S.kadPending=null; closeSheet(); if(!list) return;
+  if(id){ S.dirty=false; await openBudget(id); if(S.id!==id) return; if(S.ro) return toast('Šo budžetu labot nevar — izveidojiet kopiju','err'); }
+  const by={}; [...(S.d.kadastri||[]),...list].forEach(k=>by[k.buve]=k); S.d.kadastri=Object.values(by);
+  if(S.d.kadastri.length===list.length && !id && false) {}
+  kadImport(kadCombine(S.d.kadastri), true);
+}
+function kadRemove(i){ const l=S.d.kadastri||[]; const k=l[i]; if(!k) return;
+  confirmSheet('Noņemt kadastra objektu?', (k.adrese||k.buve)+' — tā telpas un dzīvokļi tiks atņemti no budžeta.', 'Noņemt', ()=>{ l.splice(i,1); if(l.length) kadImport(kadCombine(l), true); else { S.dirty=true; renderEditor(); } }, true); }
+function kadCard(){ const l=S.d.kadastri||[]; if(!l.length) return '';
+  return `<div class="card panel" style="margin-bottom:12px"><div class="section-t" style="margin-top:0">Kadastra objekti <span>${l.length}</span></div>
+    ${l.map((k,i)=>`<div class="kv"><span><b style="color:var(--ink)">${esc(k.adrese||'—')}</b><br><small>${esc(k.buve)} · ${k.dzivokli||0} dz. · ${nfmt(k.dzivoklu_m2)} m² · kopl. ${nfmt(r1((k.telpas||[]).reduce((s,t)=>s+(+t.m2||0),0)))} m²</small></span>${S.ro?'':`<button class="jdel" onclick="kadRemove(${i})">Noņemt</button>`}</div>`).join('')}
+    <div class="hint">Vēl kādu māju vai sekciju: kadastrs.lv → «SH Kadastrs» → «Pievienot…».</div></div>`; }
 
 /* ---- darbības ---- */
 function validate(){ const o=S.d.objekts; if(!(o.nosaukums||'').trim() && !(o.adrese||'').trim()){ setSec('objekts'); toast('Ievadiet objekta nosaukumu vai adresi','err'); return false; } return true; }
@@ -1441,6 +1486,7 @@ function download(f){
 addEventListener('beforeunload', e=>{ if(S.dirty){ e.preventDefault(); e.returnValue=''; } });
 
 /* ---------- Starts ---------- */
+addEventListener('hashchange',()=>{ const m=location.hash.match(/^#kadastrs=([A-Za-z0-9_-]+)/); if(!m||!S.user) return; try{ const k=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/'))))); history.replaceState(null,'',location.pathname+location.search); kadStart(k); }catch(e){} });
 (function boot(){
   const m=location.hash.match(/^#kadastrs=([A-Za-z0-9_-]+)/);
   if(m){ try{ S.pendingKad=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/'))))); }catch(e){} history.replaceState(null,'',location.pathname+location.search); }
