@@ -773,8 +773,9 @@ async function tryLogin(pin, silent){
   if(!pin) return;
   S.pin=pin; const b=$('loginBtn'); busyBtn(b,true);
   try{
-    const r=await api('login'); S.user=r.user; ls.set('budzets_pin',pin); startApp();
+    const r=await api('login'); S.user=r.user; ls.set('budzets_pin',pin); ls.set('budzets_user',JSON.stringify(r.user)); startApp();
   }catch(err){
+    ls.del('budzets_user');
     ls.del('budzets_pin'); S.pin=''; showLogin();
     if(!silent){ $('loginErr').textContent=netMsg(err); $('loginForm').classList.remove('shake'); void $('loginForm').offsetWidth; $('loginForm').classList.add('shake'); $('pinInput').value=''; }
   }finally{ busyBtn(b,false,'Ienākt'); }
@@ -784,7 +785,7 @@ function showLogin(){
   $('login').hidden=false; $('login').classList.add('active'); $('appViews').hidden=true; $('backBtn').hidden=true; $('logoBox').hidden=false;
   $('brandSub').textContent='Uzkopšanas tāmes · budžeti';
 }
-function logout(){ ls.del('budzets_pin'); S.pin=''; S.user=null; closeSheet(); showLogin(); }
+function logout(){ ls.del('budzets_pin'); ls.del('budzets_user'); ls.del('budzets_list'); S.pin=''; S.user=null; closeSheet(); showLogin(); }
 
 /* ---------- Lietotne ---------- */
 const ROLE_TABS = {
@@ -799,11 +800,11 @@ function startApp(){
   $('tabs').innerHTML='<span class="tab-ind" id="tabInd"></span>'+tabs.map(([id,l,ic])=>`<button class="tab" data-tab="${id}">${ic}<span>${l}</span><span class="count" id="cnt-${id}"></span></button>`).join('');
   $('tabs').onclick=(e)=>{ const b=e.target.closest('.tab'); if(b) switchView(b.dataset.tab); };
   switchView('list');
-  if(S.pendingKad){ const k=S.pendingKad; S.pendingKad=null; kadStart(k); }
+  if(S.pendingKad){ const k=S.pendingKad; S.pendingKad=null; kadStart(k); } else setTimeout(draftOffer,400);
 }
 function setTabsVisible(on){ $('tabs').hidden=!on; $('app').classList.toggle('no-tabs',!on); if(on) placeTabs(); }
 function switchView(v, force){
-  if(S.view==='edit' && S.dirty && !force){ return confirmSheet('Nesaglabātas izmaiņas','Budžetā ir izmaiņas, kas nav saglabātas. Iziet bez saglabāšanas?','Iziet', ()=>{ S.dirty=false; switchView(v,true); }, true); }
+  if(S.view==='edit' && S.dirty && !force){ return confirmSheet('Nesaglabātas izmaiņas','Budžetā ir izmaiņas, kas nav saglabātas. Iziet bez saglabāšanas?','Iziet', ()=>{ S.dirty=false; draft.clear(); switchView(v,true); }, true); }
   if(v==='new'){ return newBudget(); }
   S.view=v; S.dirty=false;
   $('app').classList.remove('editing'); $('pricebar').hidden=true; $('backBtn').hidden=true; $('logoBox').hidden=false;
@@ -843,9 +844,12 @@ function confirmSheet(title, text, okLabel, onOk, danger){
 
 /* ---------- Saraksts ---------- */
 async function load(){
-  if(S.view==='list') $('listBody').innerHTML='<div class="skel"></div><div class="skel"></div>';
-  try{ const r=await api('list'); S.list=r.items||[]; }
+  if(!S.list.length){ try{ const c=JSON.parse(ls.get('budzets_list')||'null'); if(c&&c.u===S.user.name) S.list=c.items||[]; }catch(e){} }
+  if(S.list.length){ drawHero(); drawCounts(); if(S.view==='list') drawList(); else if(S.view==='stats') drawStats(); }
+  else if(S.view==='list') $('listBody').innerHTML='<div class="skel"></div><div class="skel"></div>';
+  try{ const r=await api('list'); S.list=r.items||[]; ls.set('budzets_list',JSON.stringify({u:S.user.name,items:S.list})); }
   catch(err){ toast(netMsg(err),'err'); }
+  if(S.view==='edit') return;
   drawHero(); drawCounts();
   if(S.view==='list') drawList(); else if(S.view==='stats') drawStats();
 }
@@ -1076,15 +1080,28 @@ function newBudget(){
   S.id=null; S.meta={statuss:'Melnraksts',autors:S.user.name,versija:0}; S.d=blankBudget(); S.ro=false; S.sec='objekts'; S.dirty=false; S.histVer=null; S.aiUndo=null;
   openEditor();
 }
+const bcache = { get(id){ try{ return JSON.parse(ls.get('budzets_b_'+id)||'null'); }catch(e){ return null; } },
+  set(id,v){ try{ localStorage.setItem('budzets_b_'+id, JSON.stringify(v)); const k=JSON.parse(ls.get('budzets_bk')||'[]').filter(x=>x!==id); k.unshift(id);
+    k.slice(12).forEach(x=>ls.del('budzets_b_'+x)); ls.set('budzets_bk',JSON.stringify(k.slice(0,12))); }catch(e){} } };
 async function openBudget(id, versija){
+  if(!versija){ const c=bcache.get(id), lm=S.list.find(b=>b.id===id);
+    if(c && lm && c.meta && c.meta.atjaunots===lm.atjaunots && c.meta.statuss===lm.statuss){ showBudget(id,{meta:Object.assign({},c.meta,lm),data:c.data},null); refreshQuiet(id); return; } }
   try{
     const r = await api('get',{id, versija:versija||null});
+    if(!versija) bcache.set(id,{meta:r.meta,data:r.data});
+    showBudget(id,r,versija);
+  }catch(err){ toast(netMsg(err),'err'); }
+}
+async function refreshQuiet(id){ try{ const r=await api('get',{id}); bcache.set(id,{meta:r.meta,data:r.data});
+  if(S.id===id && !S.dirty && !S.histVer && (r.meta.atjaunots!==S.meta.atjaunots || r.meta.statuss!==S.meta.statuss)){ showBudget(id,r,null); toast('Atjaunots no servera'); } }catch(e){} }
+function showBudget(id, r, versija){
+  {
     S.id=id; S.meta=r.meta; S.d=migrate(r.data); S.histVer=versija||null; S.dirty=false; S.aiUndo=null;
     const own = r.meta.autors===S.user.name;
     S.ro = !!versija || !isMaker() || (!own && S.user.role!=='admin') || (r.meta.statuss==='Apstiprināts' && S.user.role!=='admin') || r.meta.statuss==='Arhivēts';
     if(S.view!=='edit') S.sec = S.ro ? 'tame' : 'objekts';
     openEditor();
-  }catch(err){ toast(netMsg(err),'err'); }
+  }
 }
 function migrate(d){ const b=blankBudget(); d=d||{}; ['objekts','param'].forEach(k=>d[k]=Object.assign({},b[k],d[k]||{})); ['telpas','darbi','sezon','invIek','invPag'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=b[k]; d[k].forEach(x=>{ if(!x.id) x.id=uid(); }); }); return d; }
 function copyBudget(){
@@ -1102,6 +1119,7 @@ const SECS=[['objekts','Objekts'],['platibas','Platības'],['darbi','Darbi'],['s
 function setSec(s){ S.sec=s; renderEditor(); window.scrollTo({top:0,behavior:'smooth'}); }
 
 function renderEditor(){
+  if(S.dirty) draft.save();
   const c=calc(S.d); S.c=c; const m=S.meta||{};
   let h=`<section class="hero"><div class="hero-text"><div class="hello">${S.id?esc(S.id)+' · v'+(S.histVer||m.versija)+' · '+esc(m.autors||''):'Jauns budžets · '+esc(S.user.name)}</div>
     <h2>${esc(S.d.objekts.nosaukums||S.d.objekts.adrese||'Jauns budžets')}</h2>
@@ -1150,10 +1168,16 @@ function moreSheet(){
 /* ---- ievade ---- */
 function getP(path){ return path.split('.').reduce((o,k)=>o==null?o:o[k], S.d); }
 function setP(path,v){ const ks=path.split('.'); const last=ks.pop(); const o=ks.reduce((o,k)=>o[k],S.d); o[last]=v; }
+const draft={ t:null, save(){ clearTimeout(this.t); this.t=setTimeout(()=>{ if(S.dirty&&S.d&&!S.ro) ls.set('budzets_draft',JSON.stringify({id:S.id,meta:S.meta,d:S.d,at:Date.now(),u:S.user&&S.user.name})); },700); },
+  clear(){ clearTimeout(this.t); ls.del('budzets_draft'); }, get(){ try{ return JSON.parse(ls.get('budzets_draft')||'null'); }catch(e){ return null; } } };
+function draftOffer(){ const x=draft.get(); if(!x||!x.d||x.u!==S.user.name||Date.now()-x.at>7*864e5) return;
+  openSheet(`<h3>Nesaglabāts budžets</h3><p class="lead">${esc(x.d.objekts.nosaukums||x.d.objekts.adrese||'Budžets')} — izmaiņas no ${new Date(x.at).toLocaleString('lv-LV')} nav saglabātas.</p>
+    <div class="btn-row"><button class="btn btn-glass" onclick="draft.clear();closeSheet()">Atmest</button><button class="btn btn-primary" onclick="draftRestore()">Atjaunot</button></div>`,true); }
+function draftRestore(){ const x=draft.get(); closeSheet(); if(!x) return; S.id=x.id||null; S.meta=x.meta||{statuss:'Melnraksts',autors:S.user.name,versija:0}; S.d=migrate(x.d); S.ro=false; S.histVer=null; S.dirty=true; S.sec='objekts'; openEditor(); toast('Atjaunots — neaizmirstiet saglabāt','ok'); }
 function onIn(el, rerender){
   const p=el.dataset.p; let v;
   if(el.type==='checkbox') v=el.checked; else if(el.dataset.t==='n') v=pnum(el.value); else if(el.dataset.t==='pct') v=pnum(el.value)/100; else v=el.value;
-  setP(p,v); if(!S.dirty){ S.dirty=true; S.c&&drawPricebar(S.c); }
+  setP(p,v); draft.save(); if(!S.dirty){ S.dirty=true; S.c&&drawPricebar(S.c); }
   if(rerender) return renderEditor();
   const c=calc(S.d); S.c=c; $('pbPrice').textContent=eur(c.bezPVN); $('pbM2').textContent=c.perM2bez==null?'':' · '+eur4(c.perM2bez)+'/m²'; updOut(c);
 }
@@ -1440,7 +1464,12 @@ async function save(statuss, piezime){
   try{
     const r=await api('save',{id:S.id, data:S.d, calc:co, statuss:statuss||null, piezime:piezime||''});
     S.id=r.id; S.meta=Object.assign({},S.meta,{id:r.id,versija:r.versija,statuss:r.statuss,autors:S.meta.autors||S.user.name});
-    S.dirty=false; S.aiUndo=null; toast(statuss==='Iesniegts'?'Iesniegts vadībai':'Saglabāts · v'+r.versija,'ok'); renderEditor();
+    S.meta.atjaunots=r.atjaunots; S.dirty=false; S.aiUndo=null; draft.clear();
+    bcache.set(r.id,{meta:S.meta,data:JSON.parse(JSON.stringify(S.d))});
+    const cc=calc(S.d), o=S.d.objekts, item=Object.assign({},S.list.find(b=>b.id===r.id)||{},{id:r.id,nosaukums:o.nosaukums,adrese:o.adrese,pasutitajs:o.pasutitajs,autors:S.meta.autors,statuss:r.statuss,
+      bezPVN:cc.bezPVN,arPVN:cc.arPVN,versija:r.versija,atjaunots:r.atjaunots,sagatavots:o.sagatavots,plat:pnum(o.lietderiga),perM2:cc.perM2bez});
+    S.list=[item,...S.list.filter(b=>b.id!==r.id)]; ls.set('budzets_list',JSON.stringify({u:S.user.name,items:S.list}));
+    toast(statuss==='Iesniegts'?'Iesniegts vadībai':'Saglabāts · v'+r.versija,'ok'); renderEditor();
   }catch(err){ toast(netMsg(err),'err'); busyBtn(b,false); }
 }
 function submitSheet(){
@@ -1454,12 +1483,12 @@ function decide(st){
     ${fld('Komentārs '+(st==='Noraidīts'?'<span class="opt">· ko labot</span>':'<span class="opt">· nav obligāti</span>'),'<textarea class="textarea" id="decNote"></textarea>')}
     <div class="btn-row"><button class="btn btn-glass" onclick="closeSheet()">Atcelt</button><button class="btn ${st==='Noraidīts'?'btn-danger':'btn-primary'}" id="decGo">${label}</button></div>`, true);
   $('decGo').onclick=async()=>{ const n=$('decNote').value, b=$('decGo'); busyBtn(b,true);
-    try{ await api('status',{id:S.id, statuss:st, komentars:n}); closeSheet(); toast('Statuss: '+st,'ok'); await openBudget(S.id); }
+    try{ await api('status',{id:S.id, statuss:st, komentars:n}); ls.del('budzets_b_'+S.id); S.list=S.list.map(b=>b.id===S.id?Object.assign({},b,{statuss:st,komentars:n,atjaunots:''}):b); closeSheet(); toast('Statuss: '+st,'ok'); await openBudget(S.id); }
     catch(err){ toast(netMsg(err),'err'); busyBtn(b,false); } };
 }
 function delB(){
   confirmSheet('Dzēst budžetu?','Budžets pazudīs no saraksta. Versiju vēsture paliks tabulā «Versijas».','Dzēst', async()=>{
-    try{ await api('del',{id:S.id}); S.dirty=false; toast('Dzēsts','ok'); switchView('list',true); }catch(err){ toast(netMsg(err),'err'); } }, true);
+    try{ await api('del',{id:S.id}); ls.del('budzets_b_'+S.id); S.list=S.list.filter(b=>b.id!==S.id); ls.set('budzets_list',JSON.stringify({u:S.user.name,items:S.list})); S.dirty=false; draft.clear(); toast('Dzēsts','ok'); switchView('list',true); }catch(err){ toast(netMsg(err),'err'); } }, true);
 }
 async function versions(){
   try{
@@ -1487,10 +1516,19 @@ addEventListener('beforeunload', e=>{ if(S.dirty){ e.preventDefault(); e.returnV
 
 /* ---------- Starts ---------- */
 addEventListener('hashchange',()=>{ const m=location.hash.match(/^#kadastrs=([A-Za-z0-9_-]+)/); if(!m||!S.user) return; try{ const k=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/'))))); history.replaceState(null,'',location.pathname+location.search); kadStart(k); }catch(e){} });
+/* ātrs starts: lietotājs no ierīces, pārbaude fonā */
+async function fastStart(pin){
+  let u=null; try{ u=JSON.parse(ls.get('budzets_user')||'null'); }catch(e){}
+  if(!u) return tryLogin(pin,true);
+  S.pin=pin; S.user=u; startApp();
+  try{ const r=await api('login'); S.user=r.user; ls.set('budzets_user',JSON.stringify(r.user));
+    if(r.user.role!==u.role||r.user.name!==u.name){ $('brandSub').textContent=S.user.name+' · '+roleLabel(S.user.role); } }
+  catch(err){ if(/PIN/i.test(err.message)){ toast('PIN vairs nav derīgs — ienāciet vēlreiz','err'); logout(); } }
+}
 (function boot(){
   const m=location.hash.match(/^#kadastrs=([A-Za-z0-9_-]+)/);
   if(m){ try{ S.pendingKad=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/'))))); }catch(e){} history.replaceState(null,'',location.pathname+location.search); }
-  const p=ls.get('budzets_pin'); if(p) tryLogin(p,true); else { showLogin(); if(S.pendingKad) $('loginErr').textContent='Ienāciet — kadastra dati tiks ielikti jaunā budžetā.'; }
+  const p=ls.get('budzets_pin'); if(p) fastStart(p); else { showLogin(); if(S.pendingKad) $('loginErr').textContent='Ienāciet — kadastra dati tiks ielikti jaunā budžetā.'; }
 })();
 
 </script>

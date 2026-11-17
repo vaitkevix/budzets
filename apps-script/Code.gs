@@ -121,6 +121,13 @@ function log_(user, action, id, info) {
 }
 
 function users_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('users');
+  if (hit) return JSON.parse(hit);
+  const list = usersRead_();
+  cache.put('users', JSON.stringify(list), 60);
+  return list;
+}
+function usersRead_() {
   const v = sh_(SHEETS.USERS).getDataRange().getValues();
   v.shift();
   return v.filter(r => r[0] && norm_(r[3]) !== 'nē')
@@ -141,6 +148,23 @@ function budRows_() {
   v.shift();
   return v;
 }
+/** Saraksts bez «Dati» stabiņa (ātrāk) + kešs */
+function metaAll_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get('meta');
+  if (hit) return JSON.parse(hit);
+  const sh = sh_(SHEETS.BUD), n = sh.getLastRow() - 1, iD = BUD_HEAD.indexOf('Dati');
+  let list = [];
+  if (n > 0) {
+    const a = sh.getRange(2, 1, n, iD).getValues();
+    const b = sh.getRange(2, iD + 2, n, Math.max(1, BUD_HEAD.length - iD - 1)).getValues();
+    list = a.map((r, i) => r.concat([''], b[i])).filter(r => r[0]).map(rowToMeta_);
+  }
+  const js = JSON.stringify(list);
+  if (js.length < 90000) cache.put('meta', js, 300);
+  return list;
+}
+function bust_() { CacheService.getScriptCache().remove('meta'); }
+
 function rowToMeta_(r) {
   const o = {};
   BUD_HEAD.forEach((h, i) => { if (h !== 'Dati') o[h] = r[i] instanceof Date ? Utilities.formatDate(r[i], TZ, 'yyyy-MM-dd') : r[i]; });
@@ -155,8 +179,12 @@ function rowToMeta_(r) {
   };
 }
 function findRow_(id) {
-  const rows = budRows_();
-  for (let i = 0; i < rows.length; i++) if (String(rows[i][0]) === String(id)) return { idx: i + 2, row: rows[i] };
+  const sh = sh_(SHEETS.BUD), n = sh.getLastRow() - 1;
+  if (n < 1) return null;
+  const ids = sh.getRange(2, 1, n, 1).getValues();
+  for (let i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) {
+    return { idx: i + 2, row: sh.getRange(i + 2, 1, 1, BUD_HEAD.length).getValues()[0] };
+  }
   return null;
 }
 function canSee_(u, meta) { return isMgmt_(u) || norm_(meta.autors) === norm_(u.name); }
@@ -164,7 +192,7 @@ function canSee_(u, meta) { return isMgmt_(u) || norm_(meta.autors) === norm_(u.
 /* ---------------- Budžeti ---------------- */
 
 function listBudgets_(u) {
-  const list = budRows_().filter(r => r[0]).map(rowToMeta_).filter(m => canSee_(u, m));
+  const list = metaAll_().filter(m => canSee_(u, m));
   list.sort((a, b) => String(b.atjaunots).localeCompare(String(a.atjaunots)));
   return list;
 }
@@ -180,7 +208,8 @@ function getBudget_(u, id) {
 function nextId_() {
   const year = Utilities.formatDate(new Date(), TZ, 'yyyy');
   let max = 0;
-  budRows_().forEach(r => {
+  const sh = sh_(SHEETS.BUD), n = sh.getLastRow() - 1;
+  (n > 0 ? sh.getRange(2, 1, n, 1).getValues() : []).forEach(r => {
     const m = String(r[0]).match(/^B-(\d{4})-(\d+)$/);
     if (m && m[1] === year) max = Math.max(max, Number(m[2]));
   });
@@ -222,8 +251,9 @@ function saveBudget_(u, payload) {
     if (row) sh.getRange(row, 1, 1, values.length).setValues([values]);
     else sh.appendRow(values);
     sh_(SHEETS.VER).appendRow([id, version, ts, u.name, status, round2_(c.bezPVN), payload.piezime || '', json]);
+    bust_();
     log_(u.name, row ? 'Saglabāja' : 'Izveidoja', id, 'v' + version + ' · ' + status);
-    return { id: id, versija: version, statuss: status };
+    return { id: id, versija: version, statuss: status, atjaunots: ts };
   } finally {
     lock.releaseLock();
   }
@@ -246,6 +276,7 @@ function setStatus_(u, id, status, comment) {
     sh.getRange(f.idx, BUD_HEAD.indexOf('Izskatīja') + 1).setValue(u.name + ' · ' + now_().slice(0, 16).replace('T', ' '));
   }
   sh_(SHEETS.VER).appendRow([id, meta.versija, now_(), u.name, status, meta.bezPVN, comment || ('Statuss → ' + status), '']);
+  bust_();
   log_(u.name, 'Statuss', id, status + (comment ? ' · ' + comment : ''));
   return true;
 }
@@ -257,6 +288,7 @@ function deleteBudget_(u, id) {
   const own = norm_(meta.autors) === norm_(u.name);
   if (!(u.role === 'admin' || (own && meta.statuss === 'Melnraksts'))) throw new Error('Dzēst var tikai savu melnrakstu (vai admins).');
   sh_(SHEETS.BUD).deleteRow(f.idx);
+  bust_();
   log_(u.name, 'Dzēsa', id, meta.nosaukums);
   return true;
 }
@@ -316,7 +348,7 @@ function exportXlsx_(u, id, data, calc, meta) {
 
 /** Vadībai — visu (atfiltrēto) budžetu saraksts Excel failā */
 function exportListXlsx_(u, ids) {
-  const all = budRows_().filter(r => r[0]).map(rowToMeta_).filter(m => canSee_(u, m));
+  const all = metaAll_().filter(m => canSee_(u, m));
   const list = ids && ids.length ? all.filter(m => ids.indexOf(m.id) >= 0) : all;
   const name = 'Budžetu saraksts ' + Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   const ss = SpreadsheetApp.create(name);
@@ -663,3 +695,7 @@ function aiTelpas_(u, nosaukumi) {
   const j = aiJson_(system, names.join('\n'), schema, 1200);
   return (j.telpas || []).filter(x => cats.indexOf(x.kategorija) >= 0);
 }
+
+
+/** Ja kāds labo tabulu ar roku — notīra kešu */
+function onEdit() { try { CacheService.getScriptCache().removeAll(['meta', 'users']); } catch (e) {} }
