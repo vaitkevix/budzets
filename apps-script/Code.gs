@@ -552,32 +552,85 @@ function aiCall_(system, prompt, maxTokens) {
   throw new Error('AI nav iestatīts — Apps Script → Project Settings → Script properties: ANTHROPIC_API_KEY');
 }
 
+/** Claude ar piespiedu rīku → vienmēr strukturēts objekts (bez JSON parsēšanas kļūdām) */
+function aiJson_(system, prompt, schema, maxTokens) {
+  const props = PropertiesService.getScriptProperties();
+  const claudeKey = props.getProperty('ANTHROPIC_API_KEY');
+  if (claudeKey) {
+    const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify({
+        model: props.getProperty('AI_MODEL') || 'claude-haiku-5-5', max_tokens: maxTokens, system: system,
+        tools: [{ name: 'aizpildit_formu', description: 'Aizpilda tāmes formu ar datiem no kadastra teksta.', input_schema: schema }],
+        tool_choice: { type: 'tool', name: 'aizpildit_formu' },
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const j = JSON.parse(res.getContentText());
+    if (res.getResponseCode() !== 200) throw new Error('AI kļūda: ' + (j.error && j.error.message || res.getResponseCode()));
+    const tu = (j.content || []).find(c => c.type === 'tool_use');
+    if (!tu) throw new Error('AI neatgrieza datus.');
+    return tu.input || {};
+  }
+  return looseJson_(aiCall_(system + '\nAtbildi TIKAI ar JSON objektu pēc šīs shēmas: ' + JSON.stringify(schema), prompt, maxTokens));
+}
+
+/** Iecietīga JSON nolasīšana (``` bloki, komentāri, liekie komati) */
+function looseJson_(out) {
+  let t = String(out || '').replace(/```(?:json)?/gi, '');
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b < a) throw new Error('AI neatgrieza datus.');
+  t = t.slice(a, b + 1).replace(/\/\/[^\n]*/g, '').replace(/,\s*([}\]])/g, '$1').replace(/\bNaN\b|\bundefined\b/g, 'null');
+  try { return JSON.parse(t); } catch (e) { throw new Error('AI atbildi neizdevās nolasīt.'); }
+}
+
 function aiKadastrs_(u, text) {
   text = String(text || '').trim();
   if (text.length < 20) throw new Error('Ielīmē kadastra datus (vismaz dažas rindas).');
   if (text.length > 30000) text = text.slice(0, 30000);
+  const N = { type: ['number', 'null'] };
+  const schema = {
+    type: 'object',
+    properties: {
+      nosaukums: { type: ['string', 'null'], description: 'Īsa adrese + dzīvokļu skaits, piem. "Kvēles 24 (60 dzīvokļi)"; ja dzīvokļu skaits nav zināms — tikai īsā adrese' },
+      adrese: { type: ['string', 'null'], description: 'Pilna adrese bez pasta indeksa, piem. "Kvēles iela 24, Rīga"' },
+      dzivokli: Object.assign({ description: 'Dzīvokļu skaits, ja norādīts' }, N),
+      lietderiga: Object.assign({ description: 'Dzīvokļu m² bez ārtelpām/balkoniem: "Dzīvokļu platība"; ja tādas nav — "Dzīvokļu kopējā platība" mīnus "Dzīvokļu ārtelpu platība"' }, N),
+      stavi: Object.assign({ description: 'Virszemes stāvu skaits' }, N),
+      lifti: Object.assign({ description: 'Liftu skaits, ja norādīts' }, N),
+      zemes_platiba: Object.assign({ description: 'Zemes vienības platība m², ja norādīta' }, N),
+      apbuves_laukums: Object.assign({ description: 'Būves apbūves laukums m², ja norādīts' }, N),
+      zonas: {
+        type: 'object',
+        properties: {
+          kapnu: Object.assign({ description: 'Kāpņu telpas, gaiteņi, vestibils m². Ja ir tikai kopējā "Koplietošanas iekštelpu platība" — liec to šeit (atņemot citas zonas, ja tās zināmas)' }, N),
+          ratinu: Object.assign({ description: 'Ratiņu/velosipēdu telpa m²' }, N),
+          tehniskas: Object.assign({ description: 'Tehniskās telpas, siltummezgls, elektro, apsaimniekotāja telpa m²' }, N),
+          atputas: Object.assign({ description: 'Koplietošanas atpūtas telpa / sanmezgls m²' }, N),
+          terase: Object.assign({ description: 'Koplietošanas terase / koplietošanas ārtelpas m² (piem. "Koplietošanas ārtelpu platība")' }, N)
+        }
+      },
+      citas_zonas: { type: 'array', items: { type: 'object', properties: { nosaukums: { type: 'string' }, m2: { type: 'number' } }, required: ['nosaukums', 'm2'] } },
+      teritorija: {
+        type: 'object',
+        properties: {
+          cieti: Object.assign({ description: 'Cietie segumi m² (ja zināma zeme: (zeme − apbūve) × 40%, ja sadalījums nav dots)' }, N),
+          zale: Object.assign({ description: 'Zālāji, apstādījumi m² (ja zināma zeme: (zeme − apbūve) × 60%, ja sadalījums nav dots)' }, N)
+        }
+      },
+      garaza: Object.assign({ description: 'Pazemes autostāvvieta / garāža m², ja ir' }, N),
+      piezimes: { type: 'string', description: 'Īsi latviski: no kurām rindām ņemti skaitļi, kas ir aplēse, kas trūkst (piem. zemes platība)' }
+    },
+    required: ['piezimes']
+  };
   const system = [
-    'Tu esi asistents, kas no Latvijas Kadastra (kadastrs.lv / VZD) izkopētiem būves un zemes datiem aizpilda uzkopšanas tāmes formu.',
-    'Atbildi TIKAI ar vienu JSON objektu, bez paskaidrojumiem un bez ``` zīmēm. Nezināmām vērtībām liec null. Skaitļi — bez mērvienībām, decimāldaļa ar punktu.',
-    'Shēma:',
-    '{"nosaukums":"<īsa adrese> (<N> dzīvokļi)","adrese":"<pilna adrese>","dzivokli":<dzīvokļu skaits>,"lietderiga":<dzīvokļu telpu grupu kopplatība m2 bez balkoniem/lodžijām>,',
-    ' "stavi":<virszemes stāvu skaits>,"lifti":<liftu skaits>,"zemes_platiba":<zemes vienības platība m2>,"apbuves_laukums":<būves apbūves laukums m2>,',
-    ' "zonas":{"kapnu":<kāpņu telpas, gaiteņi, vestibils m2>,"ratinu":<ratiņu/velosipēdu telpa m2>,"tehniskas":<tehniskās telpas + apsaimniekotāja telpa m2>,"atputas":<koplietošanas atpūtas telpa/sanmezgls m2>,"terase":<koplietošanas terase m2>},',
-    ' "citas_zonas":[{"nosaukums":"<cita koplietošanas iekštelpa>","m2":<m2>}],',
-    ' "teritorija":{"cieti":<cietie segumi m2>,"zale":<zālāji, apstādījumi m2>},"garaza":<pazemes autostāvvieta / garāža m2, ja ir>,',
-    ' "piezimes":"<īsi latviski: no kurienes ņemti skaitļi, kas ir aplēse>"}',
-    'Noteikumi:',
-    '- Koplietošanas telpas ņem no telpu grupām ar lietošanas veidu, kas satur "koplietošanas", "kāpņu telpa", "gaitenis", "vestibils", "tehniskā", "katlu", "siltummezgls", "elektro" u.tml. Pagrabu/noliktavu nodalījumus, kas pieder dzīvokļiem, neskaiti.',
-    '- Ja ir tikai kopējā koplietošanas platība bez sadalījuma, liec to "kapnu".',
-    '- Pazemes autostāvvietu / garāžu NEliec zonās, bet laukā "garaza".',
-    '- Teritorija = zemes vienības platība − apbūves laukums. Ja seguma sadalījums nav zināms, aplēs: cietie segumi 40%, zālāji 60%, un piezīmēs to norādi.',
-    '- Dzīvokļu skaits = telpu grupu skaits ar lietošanas veidu "dzīvoklis" (vai norādītais dzīvokļu skaits).'
+    'Tu no Latvijas Kadastra (kadastrs.lv / VZD) izkopēta teksta aizpildi uzkopšanas tāmes formu, izsaucot rīku aizpildit_formu.',
+    'Ņem tikai skaitļus, kas tekstā tiešām ir (decimāldaļa ar punktu). Ko nevar noteikt — null. Neizdomā zemes platību, liftus vai dzīvokļu skaitu.',
+    'Dzīvokļu īpašumu nodalījumi (pagrabi, noliktavas), kas pieder dzīvokļiem, NAV koplietošanas zonas.',
+    'Koplietošanas palīgtelpu platība = koplietošanas iekštelpas + koplietošanas ārtelpas; neskaiti to divreiz.'
   ].join('\n');
-  const out = aiCall_(system, text, 1500);
-  const m = out.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('AI neatgrieza datus. Pamēģini ielīmēt vairāk kadastra teksta.');
-  let j;
-  try { j = JSON.parse(m[0]); } catch (e) { throw new Error('AI atbildi neizdevās nolasīt.'); }
-  log_(u.name, 'AI kadastrs', '', (j.adrese || '') + '');
+  const j = aiJson_(system, text, schema, 1500);
+  log_(u.name, 'AI kadastrs', '', String(j.adrese || ''));
   return j;
 }
