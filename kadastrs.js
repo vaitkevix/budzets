@@ -15,8 +15,9 @@
   const get = async (u) => new DOMParser().parseFromString(await (await fetch(u, { credentials: 'include' })).text(), 'text/html');
   const txt = (d) => d.body.innerText.replace(/[ \t ]+/g, ' ');
   const num = (s) => { const n = parseFloat(String(s || '').replace(/\s/g, '').replace(',', '.')); return isFinite(n) ? n : null; };
-  const field = (t, label) => { const m = t.match(new RegExp(label.replace(/[()]/g, '\\$&') + '\\s*:?\\s*([0-9.,]+)')); return m ? num(m[1]) : null; };
-  const fieldS = (t, label) => { const m = t.match(new RegExp(label + '\\s*:\\s*([^\\n]+)')); return m ? m[1].trim() : ''; };
+  const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const field = (t, label) => { const m = t.match(new RegExp(rx(label) + '\\s*:?\\s*(-?[0-9][0-9.,]*)')); return m ? num(m[1]) : null; };
+  const fieldS = (t, label) => { const m = t.match(new RegExp(rx(label) + '\\s*:\\s*([^\\n]+)')); return m ? m[1].trim() : ''; };
 
   (async () => {
     try {
@@ -28,7 +29,8 @@
         if (!a) return fail('Atver būvi kadastrs.lv (Meklēt būves → būve) un spied grāmatzīmi vēlreiz.');
         st('Atveru būves objektu sarakstu…', 5); doc = await get(a.href);
       }
-      const rows = [...doc.querySelectorAll('tr')].map(tr => { const a = tr.querySelector('a'); const t = a && a.textContent.trim(); return a && /^\d{11}(\d{3}(\d{3})?)?$/.test(t) ? { t, h: a.href, row: tr.textContent.replace(/\s+/g, ' ') } : null; }).filter(Boolean);
+      const seen = {};
+      const rows = [...doc.querySelectorAll('tr')].filter(tr => !tr.querySelector('tr')).map(tr => { const a = tr.querySelector('a'); const t = a && a.textContent.trim(); return a && /^\d{11}(\d{3}(\d{3})?)?$/.test(t) ? { t, h: a.href, row: tr.textContent.replace(/\s+/g, ' ') } : null; }).filter(r => r && !seen[r.t] && (seen[r.t] = 1));
       const parcel = rows.find(r => r.t.length === 11), bld = rows.find(r => r.t.length === 14);
       const groups = rows.filter(r => r.t.length === 17);
       if (!bld) return fail('Neatradu būvi šajā lapā.');
@@ -40,9 +42,9 @@
       const out = { v: 1, avots: 'kadastrs.lv', buve: bld.t, zeme_apz: parcel ? parcel.t : '',
         adrese: (bld.row.match(/\d{14}\s*[0-9/]*\s*(.+?, [^,]+?)(, LV-\d{4})?(\s|$)/) || [])[1] || '',
         nosaukums_buvei: fieldS(bt, 'Nosaukums'), tips: fieldS(bt, 'Būves tips'), gads: field(bt, 'Uzbūvēšanas gads'),
-        kopeja: field(bt, 'Kopējā platība \\(kv.m.\\)'), dzivoklu_m2: field(bt, 'Dzīvokļu platība \\(kv.m.\\)'),
-        kopl_iek: field(bt, 'Koplietošanas iekštelpu platība \\(kv.m.\\)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība \\(kv.m.\\)'),
-        stavi: field(bt, 'Virszemes stāvu skaits'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums \\(kv.m.\\)'),
+        kopeja: field(bt, 'Kopējā platība (kv.m.)'), dzivoklu_m2: field(bt, 'Dzīvokļu platība (kv.m.)'),
+        kopl_iek: field(bt, 'Koplietošanas iekštelpu platība (kv.m.)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība (kv.m.)'),
+        stavi: field(bt, 'Virszemes stāvu skaits'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums (kv.m.)'),
         dzivokli: apts.length, grupas: [], telpas: [] };
       // 3) Zeme
       if (parcel) { st('Lasu zemes vienību…', 14); const pt = txt(await get(parcel.h)); const ha = field(pt, 'Nekustamā īpašuma objekta platība'); out.zeme_m2 = ha != null ? Math.round(ha * 10000) : null; }
@@ -51,12 +53,12 @@
       const one = async (g) => {
         const d = await get(g.h); const t = txt(d);
         const lv = fieldS(t, 'Lietošanas veids'), nos = fieldS(t, 'Nosaukums');
-        const grp = { apz: g.t, nosaukums: nos, lv, m2: field(t, 'Kopējā platība \\(kv.m.\\)'), telpas: [] };
-        const tbl = [...d.querySelectorAll('table')].find(tb => /Telpas veids/.test(tb.textContent));
+        const grp = { apz: g.t, nosaukums: nos, lv, m2: field(t, 'Kopējā platība (kv.m.)'), telpas: [] };
+        const tbl = [...d.querySelectorAll('table')].filter(tb => !tb.querySelector('table') && /Telpas veids/.test(tb.textContent)).pop();
         if (tbl) {
-          const head = [...tbl.querySelectorAll('tr')][0]; const hc = [...head.children].map(c => c.textContent.trim());
+          const head = [...tbl.querySelectorAll('tr')].find(tr => /Telpas veids/.test(tr.textContent)); const hc = [...head.children].map(c => c.textContent.trim());
           const iN = hc.findIndex(h => /^Nosaukums/.test(h)), iV = hc.findIndex(h => /Telpas veids/.test(h)), iS = hc.findIndex(h => /^Stāvs/.test(h)), iP = hc.findIndex(h => /^Platība/.test(h));
-          [...tbl.querySelectorAll('tr')].slice(1).forEach(tr => { const c = [...tr.children].map(x => x.textContent.trim()); if (c.length < 3) return;
+          [...tbl.querySelectorAll('tr')].filter(tr => tr !== head).forEach(tr => { const c = [...tr.children].map(x => x.textContent.trim()); if (c.length < 5 || !c[iN]) return;
             grp.telpas.push({ n: c[iN] || '', v: c[iV] || '', s: c[iS] || '', m2: num(c[iP]) || 0 }); });
         }
         out.grupas.push(grp); done++; st('Lasu telpu grupas: ' + done + ' / ' + list.length, 15 + done / list.length * 80);
