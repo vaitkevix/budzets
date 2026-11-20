@@ -25,7 +25,7 @@
     if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', t); })();
 </script>
-<script src="config.js"></script>
+<script src="config.js?v=2"></script>
 <script src="serijas.js"></script>
 <style>
   /* ===== Krāsas un virsmas (Izvešanas pieteikumu stils) ===== */
@@ -882,6 +882,8 @@ async function api(action, data = {}) {
   if (!CFG.API_URL) throw new Error('config.js nav ievadīts API_URL');
   const r = await fetch(CFG.API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, pin: S.pin }, data)) });
   const j = await r.json();
+  if (j.notices) { let seen = {}; try { seen = JSON.parse(localStorage.getItem('budz_seen') || '{}'); } catch (e) {}
+    j.notices.forEach(n => { if (!seen[n.id]) { seen[n.id] = 1; setTimeout(() => toast(n.text, 'err'), 600); } }); try { localStorage.setItem('budz_seen', JSON.stringify(seen)); } catch (e) {} }
   if (!j.ok) throw new Error(j.error || 'Kļūda');
   return j;
 }
