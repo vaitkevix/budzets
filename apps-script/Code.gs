@@ -37,7 +37,7 @@ function addCopy_(sh) {
 /* ---------------- Web app ---------------- */
 
 function doGet() {
-  return ContentService.createTextOutput(APP_NAME + ' API — lietotne: https://vaitkevix.github.io/budzets/ · ' + copy_());
+  return ContentService.createTextOutput(APP_NAME + ' API — lietotne: https://vaitkevix.cloud/sh/#budz · ' + copy_());
 }
 
 function doPost(e) {

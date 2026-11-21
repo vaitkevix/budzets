@@ -4,7 +4,7 @@
    un atver SH | Budžets ar šiem datiem (jauns budžets vai pievienot esošam). */
 (function () {
   if (window.__shKad) return; window.__shKad = 1;
-  const APP = 'https://vaitkevix.github.io/budzets/';
+  const APP = 'https://vaitkevix.cloud/sh/#budz/';
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;right:16px;top:16px;z-index:2147483647;width:min(384px,calc(100vw - 32px))';
   const root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
@@ -138,7 +138,7 @@
       const payload = res.length === 1 ? res[0] : res;
       const json = JSON.stringify(payload);
       const enc = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      const url = APP + '#kadastrs=' + enc;
+      const url = APP + 'kadastrs=' + enc;
       const dz = res.reduce((s, k) => s + k.dzivokli, 0), m2 = res.reduce((s, k) => s + k.telpas.reduce((a, x) => a + x.m2, 0), 0);
       const zm = res[0] && res[0].zeme_m2, adr = res.map(k => k.adrese || k.buve).filter(Boolean).join('; ');
       st('<b>Gatavs ✓</b>' + (adr ? '<span class="mut">' + esc(adr) + '</span>' : '') +
