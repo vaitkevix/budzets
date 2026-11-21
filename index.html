@@ -853,7 +853,7 @@ function isoToday(add){ const d=new Date(); if(add) d.setMonth(d.getMonth()+add)
 const uid = () => Math.random().toString(36).slice(2,9);
 const isMgmt = () => S.user && (S.user.role==='vadība' || S.user.role==='admin');
 const isMaker = () => S.user && (S.user.role==='gatavotājs' || S.user.role==='admin');
-const roleLabel = r => ({admin:'Administrators', 'gatavotājs':'Gatavotājs', 'vadība':'Darbu vadītājs'})[r] || r;
+const roleLabel = r => ({admin:'Administrators', 'gatavotājs':'Izpildītājs', 'vadība':'Pieteicējs'})[r] || r;
 function plural(n, one, many){ return n % 10 === 1 && n % 100 !== 11 ? one : many; }
 function greeting(){ const h=new Date().getHours(); return h<11?'Labrīt!':h<18?'Labdien!':'Labvakar!'; }
 function longDate(){ const d=new Date(); const w=WD[d.getDay()]; return w[0].toUpperCase()+w.slice(1)+', '+d.getDate()+'. '+MON[d.getMonth()]; }
