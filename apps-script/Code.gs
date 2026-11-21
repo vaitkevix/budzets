@@ -31,7 +31,7 @@ function copy_() { return '© ' + Utilities.formatDate(new Date(), TZ, 'yyyy') +
 /** Copyright rinda Excel lapas apakšā */
 function addCopy_(sh) {
   const r = sh.getLastRow() + 2;
-  sh.getRange(r, 1).setValue(copy_()).setFontColor('#888888').setFontStyle('italic').setFontSize(9);
+  sh.getRange(r, 1).setValue('SELECTUM HOME · vaitkevix.cloud/sh · ' + copy_()).setFontColor('#6d7672').setFontSize(9);
 }
 
 /* ---------------- Web app ---------------- */
@@ -391,19 +391,22 @@ function exportListXlsx_(u, ids) {
       'Sērija', 'Dzīvokļu m²', 'Cena mēnesī bez PVN', 'Cena mēnesī ar PVN', 'Cena gadā bez PVN', '€ / m² mēn. bez PVN', 'Versija', 'Atjaunots', 'Vadības komentārs'];
     const rows = list.map(m => [m.id, m.nosaukums, m.adrese, m.pasutitajs, m.izpilditajs, m.autors, m.statuss,
       m.sagatavots, serijaName_(m.serija), m.plat || '', m.bezPVN, m.arPVN, round2_(m.bezPVN * 12), m.perM2 || '', m.versija, String(m.atjaunots).replace('T', ' '), m.komentars]);
-    sh.getRange(1, 1, 1, head.length).setValues([head]);
-    if (rows.length) sh.getRange(2, 1, rows.length, head.length).setValues(rows);
-    styleHeader_(sh.getRange(1, 1, 1, head.length));
-    if (rows.length) {
-      sh.getRange(2, 11, rows.length, 3).setNumberFormat('#,##0.00 "€"');
-      const t = rows.length + 2;
-      sh.getRange(t, 10).setValue('Kopā').setFontWeight('bold');
-      sh.getRange(2, 14, rows.length, 1).setNumberFormat('0.0000 "€"');
-      sh.getRange(t, 11, 1, 3).setFormulas([[`=SUM(K2:K${t - 1})`, `=SUM(L2:L${t - 1})`, `=SUM(M2:M${t - 1})`]])
-        .setNumberFormat('#,##0.00 "€"').setFontWeight('bold');
+    const H = 4, n = rows.length;
+    sh.getRange(H, 1, 1, head.length).setValues([head]);
+    if (n) sh.getRange(H + 1, 1, n, head.length).setValues(rows);
+    xlTable_(sh, 'Budžetu saraksts', Utilities.formatDate(new Date(), TZ, 'dd.MM.yyyy') + ' · ' + n + ' budžeti', H, head.length, n);
+    sh.getRange(H, 10, 1, 5).setHorizontalAlignment('right');
+    if (n) {
+      sh.getRange(H + 1, 10, n, 1).setNumberFormat('#,##0.0#');
+      sh.getRange(H + 1, 11, n, 3).setNumberFormat('#,##0.00 "€"');
+      const t = H + n + 1;
+      sh.getRange(t, 10).setValue('Kopā');
+      sh.getRange(H + 1, 14, n, 1).setNumberFormat('0.0000 "€"');
+      sh.getRange(t, 11, 1, 3).setFormulas([[`=SUM(K${H + 1}:K${t - 1})`, `=SUM(L${H + 1}:L${t - 1})`, `=SUM(M${H + 1}:M${t - 1})`]])
+        .setNumberFormat('#,##0.00 "€"');
+      xlTotal_(sh.getRange(t, 1, 1, head.length), true);
     }
-    sh.setFrozenRows(1);
-    sh.autoResizeColumns(1, head.length);
+    xlFit_(sh, head.length, 80);
     addCopy_(sh);
     SpreadsheetApp.flush();
     return { name: name + '.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', b64: xlsxBytes_(ss.getId()) };
@@ -437,77 +440,138 @@ function num_(x, d) { return (Number(x) || 0).toFixed(d || 0).replace('.', ',');
 function esc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function lvDate_(iso) { if (!iso) return ''; const p = String(iso).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso; }
 
+/* ---- Excel stils (sh-theme/eksports.md; Budžets = lilac) ---- */
+const XL_ = { ink: '#17201c', ink2: '#4a534f', mute: '#6d7672', line: '#dfe5e2', soft: '#f3f5f4', acc: '#e2ddf2' };
 function styleHeader_(rng) {
-  rng.setBackground('#0f6b5c').setFontColor('#ffffff').setFontWeight('bold');
+  rng.setBackground(XL_.ink).setFontColor('#ffffff').setFontWeight('bold').setFontSize(10).setVerticalAlignment('middle');
+  rng.getSheet().setRowHeight(rng.getRow(), 24);
+}
+/** 1. rinda — nosaukums lilac joslā, 2. rinda — apakšvirsraksts */
+function xlTitle_(sh, title, sub, cols) {
+  sh.getRange(1, 1, 1, cols).merge().setValue(title).setFontSize(16).setFontWeight('bold').setFontColor(XL_.ink)
+    .setBackground(XL_.acc).setVerticalAlignment('middle');
+  sh.setRowHeight(1, 34);
+  if (sub != null) sh.getRange(2, 1, 1, cols).merge().setValue(sub).setFontSize(10).setFontColor(XL_.ink2).setWrap(false);
+}
+/** Datu rindas: 10pt, plāna apakšlīnija */
+function xlBody_(rng) {
+  if (!rng || rng.getNumRows() < 1) return;
+  rng.setFontSize(10).setFontColor(XL_.ink).setVerticalAlignment('middle')
+    .setBorder(null, null, true, null, null, true, XL_.line, SpreadsheetApp.BorderStyle.SOLID);
+}
+/** Kopsumma: bold, fons, augšējā līnija */
+function xlTotal_(rng, acc) {
+  rng.setFontWeight('bold').setBackground(acc ? XL_.acc : XL_.soft).setFontColor(XL_.ink)
+    .setBorder(true, null, null, null, null, null, XL_.ink, SpreadsheetApp.BorderStyle.SOLID);
+}
+/** Vienkārša tabula: virsraksts, galvene (rinda hr), dati, piesprausta galvene, filtrs */
+function xlTable_(sh, title, sub, hr, cols, nData) {
+  xlTitle_(sh, title, sub, cols);
+  styleHeader_(sh.getRange(hr, 1, 1, cols));
+  xlBody_(sh.getRange(hr + 1, 1, Math.max(nData, 1), cols));
+  sh.setFrozenRows(hr);
+  if (nData > 0) sh.getRange(hr, 1, nData + 1, cols).createFilter();
+  sh.setHiddenGridlines(true);
+}
+function xlFit_(sh, cols, min) {
+  sh.autoResizeColumns(1, cols);
+  for (let i = 1; i <= cols; i++) { const w = sh.getColumnWidth(i); if (w < (min || 90)) sh.setColumnWidth(i, min || 90); else if (w > 360) sh.setColumnWidth(i, 360); }
 }
 
 /* ---- Excel darbgrāmata (vērtības no aprēķina) ---- */
 function buildWorkbook_(ss, d, c, meta) {
   const o = d.objekts || {};
   const EUR = '#,##0.00 "€"';
+  const subT = [o.nosaukums || o.adrese || '', o.adrese && o.nosaukums ? o.adrese : '', o.pasutitajs || '', lvDate_(o.sagatavots)].filter(Boolean).join(' · ');
   // Tāme
   const t = ss.getSheets()[0].setName('Tāme');
-  t.getRange('A1').setValue('Sanitārās apkopes tāme').setFontSize(16).setFontWeight('bold').setFontColor('#0f6b5c');
-  t.getRange('A2').setValue('Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».').setFontColor('#777777');
+  t.setHiddenGridlines(true);
+  xlTitle_(t, 'Sanitārās apkopes tāme', 'Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».', 5);
   const obj = [['Nosaukums', o.nosaukums || ''], ['Adrese', o.adrese || ''], ['Pasūtītājs', o.pasutitajs || ''],
     ['Ēkas sērija', serijaName_(o.serija) + (o.gads ? ' · ' + o.gads + '. g.' : '') + (o.stavi ? ' · ' + o.stavi + ' st.' : '')], ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs || ''], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '') + ' / ' + (o.lietderiga || '')],
     ['Budžeta ID', meta.id || ''], ['Autors', meta.autors || ''], ['Statuss', meta.statuss || '']];
   t.getRange(4, 1, obj.length, 2).setValues(obj);
-  t.getRange(4, 1, obj.length, 1).setFontColor('#777777');
-  t.getRange(4, 4, 3, 2).setValues([['Cena mēnesī bez PVN', c.bezPVN], ['Cena mēnesī ar PVN', c.arPVN], ['Uzk. izd. = € / dzīvokļu m² (bez PVN)', c.perM2bez == null ? '' : c.perM2bez]]).setFontWeight('bold');
+  xlBody_(t.getRange(4, 1, obj.length, 2));
+  t.getRange(4, 1, obj.length, 1).setFontColor(XL_.mute);
+  t.getRange(4, 2, obj.length, 1).setHorizontalAlignment('left');
+  t.getRange(4, 4, 3, 2).setValues([['Cena mēnesī bez PVN', c.bezPVN], ['Cena mēnesī ar PVN', c.arPVN], ['Uzk. izd. = € / dzīvokļu m² (bez PVN)', c.perM2bez == null ? '' : c.perM2bez]])
+    .setFontWeight('bold').setFontSize(10).setFontColor(XL_.ink).setBackground(XL_.soft)
+    .setBorder(null, null, true, null, null, true, XL_.line, SpreadsheetApp.BorderStyle.SOLID);
+  t.getRange(4, 5).setFontSize(14).setBackground(XL_.acc);
+  t.getRange(4, 4).setBackground(XL_.acc);
   t.getRange(4, 5, 2, 1).setNumberFormat(EUR);
   t.getRange(6, 5).setNumberFormat('0.0000 "€"');
   let r = 15;
   t.getRange(r, 1, 1, 5).setValues([['Nr.', 'Pozīcija (MK 408 — 1.1. Sanitārā apkope)', 'Mēnesī', 'Gadā', 'Daļa']]);
   styleHeader_(t.getRange(r, 1, 1, 5));
+  t.getRange(r, 3, 1, 3).setHorizontalAlignment('right');
   const lines = (c.lines || []).map(l => [l.nr || '', l.name, l.men, l.gada, l.dala == null ? '' : l.dala]);
   t.getRange(r + 1, 1, lines.length, 5).setValues(lines);
+  xlBody_(t.getRange(r + 1, 1, lines.length, 5));
+  t.getRange(r + 1, 1, lines.length, 1).setFontColor(XL_.mute).setHorizontalAlignment('left');
   t.getRange(r + 1, 3, lines.length, 2).setNumberFormat(EUR);
   t.getRange(r + 1, 5, lines.length, 1).setNumberFormat('0.0%');
   (c.lines || []).forEach((l, i) => {
-    if (l.bold) t.getRange(r + 1 + i, 1, 1, 5).setFontWeight('bold').setBackground(l.total ? '#094a40' : '#e3efeb')
-      .setFontColor(l.total ? '#ffffff' : '#222222');
+    if (l.bold) xlTotal_(t.getRange(r + 1 + i, 1, 1, 5), !!l.total);
   });
-  t.setColumnWidth(1, 110); t.setColumnWidth(2, 340); t.setColumnWidths(3, 3, 120); t.setColumnWidth(4, 160);
+  t.setColumnWidth(1, 110); t.setColumnWidth(2, 340); t.setColumnWidths(3, 3, 120); t.setColumnWidth(4, 220);
 
   // Platības
   const p = ss.insertSheet('Platības');
   const pr = [['Zona', 'Tips', 'Platība, m²']];
   (d.telpas || []).forEach(z => pr.push([z.nosaukums, z.tips === 'iek' ? 'Koplietošanas iekštelpas' : (z.tips === 'cieti' ? 'Teritorija — cietie segumi' : z.tips === 'gar' ? 'Garāža / pazemes stāvvieta' : 'Teritorija — zālāji / apstādījumi'), Number(z.m2) || 0]));
+  const pn = pr.length - 1;
   pr.push(['Koplietošanas iekštelpas kopā', '', c.areas.iek], ['Teritorija kopā', '', c.areas.ter], ['Logi (aprēķins)', '', c.areas.logi]);
-  p.getRange(1, 1, pr.length, 3).setValues(pr); styleHeader_(p.getRange(1, 1, 1, 3));
-  p.getRange(pr.length - 2, 1, 3, 3).setFontWeight('bold');
-  p.setColumnWidth(1, 320); p.setColumnWidth(2, 240);
+  p.getRange(4, 1, pr.length, 3).setValues(pr);
+  xlTable_(p, 'Platības', subT, 4, 3, pn);
+  p.getRange(4, 3).setHorizontalAlignment('right');
+  p.getRange(5, 3, pr.length - 1, 1).setNumberFormat('#,##0.0#');
+  xlTotal_(p.getRange(4 + pr.length - 3, 1, 3, 3));
+  p.setColumnWidth(1, 320); p.setColumnWidth(2, 240); p.setColumnWidth(3, 120);
 
   // Darbi
   const w = ss.insertSheet('Darbi');
   const wr = [['Darbs', 'Zona', 'Izpildītājs', 'Platība, m²', 'Reizes mēnesī', 'Ražība, m² / h', 'Stundas mēnesī', 'Izmaksas mēnesī']];
   (c.darbi || []).forEach(x => wr.push([x.nosaukums, x.zona, x.izp, x.area, x.reizes, x.raziba, x.h, x.cost]));
   wr.push(['Kopā', '', '', '', '', '', c.hA + c.hS, c.darbiCost]);
-  w.getRange(1, 1, wr.length, 8).setValues(wr); styleHeader_(w.getRange(1, 1, 1, 8));
-  w.getRange(2, 8, wr.length - 1, 1).setNumberFormat(EUR);
-  w.getRange(wr.length, 1, 1, 8).setFontWeight('bold');
-  w.setColumnWidth(1, 420);
+  w.getRange(4, 1, wr.length, 8).setValues(wr);
+  xlTable_(w, 'Regulārie darbi', subT, 4, 8, wr.length - 2);
+  w.getRange(4, 4, 1, 5).setHorizontalAlignment('right');
+  w.getRange(5, 4, wr.length - 1, 1).setNumberFormat('#,##0');
+  w.getRange(5, 5, wr.length - 1, 1).setNumberFormat('#,##0.00');
+  w.getRange(5, 6, wr.length - 1, 1).setNumberFormat('#,##0');
+  w.getRange(5, 7, wr.length - 1, 1).setNumberFormat('#,##0.0');
+  w.getRange(5, 8, wr.length - 1, 1).setNumberFormat(EUR);
+  xlTotal_(w.getRange(3 + wr.length, 1, 1, 8), true);
+  xlFit_(w, 8, 100); w.setColumnWidth(1, 420);
 
   // Sezonālie
   const s = ss.insertSheet('Sezonālie darbi');
   const sr = [['Sezonālais darbs', 'Platība, m²', 'Cena reizē (€/m² vai €/gab.)', 'Reizes gadā', 'Summa gadā', 'Mēnesī']];
   (c.sezon || []).forEach(x => sr.push([x.nosaukums, x.area, x.cena, x.reizes, x.gada, x.men]));
   sr.push(['Kopā', '', '', '', c.sezonGada, c.sezonMen]);
-  s.getRange(1, 1, sr.length, 6).setValues(sr); styleHeader_(s.getRange(1, 1, 1, 6));
-  s.getRange(2, 5, sr.length - 1, 2).setNumberFormat(EUR);
-  s.getRange(sr.length, 1, 1, 6).setFontWeight('bold');
-  s.setColumnWidth(1, 420);
+  s.getRange(4, 1, sr.length, 6).setValues(sr);
+  xlTable_(s, 'Sezonālie darbi', subT, 4, 6, sr.length - 2);
+  s.getRange(4, 2, 1, 5).setHorizontalAlignment('right');
+  s.getRange(5, 2, sr.length - 1, 1).setNumberFormat('#,##0');
+  s.getRange(5, 3, sr.length - 1, 1).setNumberFormat('#,##0.000');
+  s.getRange(5, 4, sr.length - 1, 1).setNumberFormat('#,##0');
+  s.getRange(5, 5, sr.length - 1, 2).setNumberFormat(EUR);
+  xlTotal_(s.getRange(3 + sr.length, 1, 1, 6), true);
+  xlFit_(s, 6, 100); s.setColumnWidth(1, 420);
 
   // Inventārs
   const inv = ss.insertSheet('Inventārs');
   const ir = [['Grupa', 'Pozīcija', 'Apraksts', 'Cena']];
   [['Iekštelpu uzkopšanai', d.invIek], ['Pagalma uzkopšanai', d.invPag]].forEach(g => (g[1] || []).filter(x => x.on).forEach(x => ir.push([g[0], x.nosaukums, x.apraksts || '', Number(x.cena) || 0])));
+  const inN = ir.length - 1;
   ir.push(['Kopā', '', '', c.invTotal], ['Nolietojums mēnesī (÷ ' + d.param.invMen + ' mēn.)', '', '', c.inv]);
-  inv.getRange(1, 1, ir.length, 4).setValues(ir); styleHeader_(inv.getRange(1, 1, 1, 4));
-  inv.getRange(2, 4, ir.length - 1, 1).setNumberFormat(EUR);
-  inv.getRange(ir.length - 1, 1, 2, 4).setFontWeight('bold');
-  inv.setColumnWidth(1, 200); inv.setColumnWidth(2, 240); inv.setColumnWidth(3, 340);
+  inv.getRange(4, 1, ir.length, 4).setValues(ir);
+  xlTable_(inv, 'Inventārs', subT, 4, 4, inN);
+  inv.getRange(4, 4).setHorizontalAlignment('right');
+  inv.getRange(5, 4, ir.length - 1, 1).setNumberFormat(EUR);
+  xlTotal_(inv.getRange(2 + ir.length, 1, 2, 4), true);
+  inv.setColumnWidth(1, 200); inv.setColumnWidth(2, 240); inv.setColumnWidth(3, 340); inv.setColumnWidth(4, 120);
 
   // Parametri
   const pa = ss.insertSheet('Parametri');
@@ -522,79 +586,116 @@ function buildWorkbook_(ss, d, c, meta) {
     ['Materiāli — iekštelpas, € / m² mēn.', P.matIek], ['Materiāli — teritorija, € / m² mēn.', P.matTer],
     ['Inventāra nolietojums, mēn.', P.invMen], ['Transports un sakari, € / mēn.', P.transports],
     ['Netiešās izmaksas', P.netiesas], ['Neparedzētie izdevumi', P.nepar], ['Peļņa', P.pelna], ['PVN', P.pvn]];
-  pa.getRange(1, 1, prm.length, 2).setValues(prm); styleHeader_(pa.getRange(1, 1, 1, 2));
-  [6, 7, 10, 11, 18, 19, 20, 21].forEach(i => pa.getRange(i, 2).setNumberFormat('0.00%'));
-  pa.setColumnWidth(1, 300);
+  pa.getRange(4, 1, prm.length, 2).setValues(prm);
+  xlTable_(pa, 'Parametri', subT, 4, 2, 0);
+  pa.getRange(4, 2).setHorizontalAlignment('right');
+  [6, 7, 10, 11, 18, 19, 20, 21].forEach(i => pa.getRange(i + 3, 2).setNumberFormat('0.00%'));
+  pa.setColumnWidth(1, 300); pa.setColumnWidth(2, 140);
+  xlBody_(pa.getRange(5, 1, prm.length - 1, 2));
   [t, p, w, s, inv, pa].forEach(addCopy_);
   ss.setActiveSheet(t);
 }
 
-/* ---- PDF HTML ---- */
+/* ---- PDF HTML (SH eksportu stils — sh-theme/eksports.md; Budžets = lilac) ---- */
 function pdfHtml_(d, c, meta) {
   const o = d.objekts || {};
-  const purple = '#0f6b5c', dark = '#094a40', lav = '#e3efeb', cream = '#f3f6f4';
+  const INK = '#17201c', INK2 = '#4a534f', MUTE = '#6d7672', LINE = '#dfe5e2', SOFT = '#f3f5f4', ACC = '#e2ddf2', BAD = '#8a2a3b', GOOD = '#2f5d45';
   const css = `
-  body{font-family:Arial,Helvetica,sans-serif;color:#222;font-size:10pt;margin:0}
-  h1{color:${purple};font-size:20pt;margin:0 0 2px}
-  h2{color:${purple};font-size:13pt;margin:18px 0 6px}
-  .sub{color:#777;font-size:8.5pt;margin-bottom:14px}
-  table{border-collapse:collapse;width:100%}
-  th{background:${purple};color:#fff;text-align:left;padding:6px 7px;font-size:8.5pt}
-  td{padding:5px 7px;border-bottom:1px solid #ddd;font-size:9pt}
-  td.r,th.r{text-align:right}
-  .muted{color:#888}
-  .tot td{background:${lav};font-weight:bold}
-  .grand td{background:${dark};color:#fff;font-weight:bold}
-  .obj td.v{background:${cream};text-align:right}
-  .res td{background:${lav}}
-  .big{font-size:15pt;font-weight:bold;color:${dark}}
+  @page{size:A4;margin:14mm}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{font-family:Manrope,-apple-system,"Segoe UI",Arial,Helvetica,sans-serif;color:${INK};font-size:11.5px;line-height:1.4;margin:0}
+  table{border-collapse:separate;border-spacing:0;width:100%}
+  tr{page-break-inside:avoid;break-inside:avoid}
+  .hd td{vertical-align:middle;border:0;padding:0}
+  .logo{width:34px;height:34px;background:${INK};border-radius:9px;padding:6px;box-sizing:border-box}
+  .logo table{width:22px;border-spacing:2px;border-collapse:separate}
+  .logo td{width:9px;height:9px;border-radius:3px;padding:0;font-size:1px;line-height:1px}
+  .brand{font-weight:800;font-size:13px;letter-spacing:-.01em;color:${INK}}
+  .kind{color:${MUTE};font-size:10.5px}
+  .when{text-align:right;color:${INK2};font-size:10.5px}
+  .when b{color:${INK};font-weight:800}
+  .band{background:${ACC};border-radius:14px;padding:16px 18px;margin:12px 0 14px}
+  h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px;color:${INK}}
+  .band .sub{color:${INK2};font-size:11px}
+  h2{font-size:15px;font-weight:800;letter-spacing:-.02em;margin:18px 0 8px;color:${INK}}
+  .card{background:${SOFT};border-radius:12px;padding:12px 14px;vertical-align:top}
+  .card .cap{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${MUTE};margin-bottom:6px}
+  .kv td{padding:4px 0;border-bottom:1px solid ${LINE};font-size:11.5px}
+  .kv tr.last td{border-bottom:0}
+  .kv td.k{color:${MUTE}}
+  .kv td.v{text-align:right;font-weight:600}
+  .big{font-size:22px;font-weight:800;letter-spacing:-.02em;color:${INK}}
+  .t th{background:${INK};color:#fff;text-align:left;padding:7px 8px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .t th.f{border-radius:8px 0 0 8px}
+  .t th.l{border-radius:0 8px 8px 0}
+  .t td{padding:6px 8px;border-bottom:1px solid ${LINE};font-size:11px}
+  .t tr.z td{background:#fafbfa}
+  .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .t th.r,.t td.r{text-align:right}
+  .muted{color:${MUTE}}
+  .t tr.tot td{background:${SOFT};font-weight:800}
+  .t tr.grand td{background:${ACC};font-weight:800;font-size:12.5px;border-bottom:0}
+  .note{margin-top:12px;color:${INK2};font-size:10.5px}
+  .chip{display:inline-block;border-radius:999px;padding:1px 8px;font-weight:700;font-size:10px}
   .pb{page-break-before:always}
-  .foot{margin-top:18px;color:#999;font-size:7.5pt}
-  .copy{margin-top:16px;padding-top:6px;border-top:1px solid #e3e3e3;color:#8a8a8a;font-size:7.5pt;text-align:center}`;
-  const objRows = [['Nosaukums', o.nosaukums], ['Adrese', o.adrese], ['Pasūtītājs', o.pasutitajs],
+  .ft{margin-top:18px;border-top:1px solid ${LINE}}
+  .ft td{padding-top:6px;color:${MUTE};font-size:9.5px;border:0}`;
+  const zebra = (i) => i % 2 ? ' class="z"' : '';
+  const kv = (rows) => rows.map((r, i) => `<tr${i === rows.length - 1 ? ' class="last"' : ''}><td class="k">${r[0]}</td><td class="v">${r[1]}</td></tr>`).join('');
+  const objRows = kv([['Nosaukums', o.nosaukums], ['Adrese', o.adrese], ['Pasūtītājs', o.pasutitajs],
     ['Ēkas sērija', serijaName_(o.serija) + (o.gads ? ' · ' + o.gads + '. g.' : '') + (o.stavi ? ' · ' + o.stavi + ' st.' : '')],
     ['Sagatavots', lvDate_(o.sagatavots)], ['Izpildītājs', o.izpilditajs], ['Dzīvokļi / dzīvokļu m²', (o.dzivokli || '—') + ' / ' + (o.lietderiga ? num_(o.lietderiga, 1) : '—')]]
-    .map(r => `<tr><td class="muted">${esc_(r[0])}</td><td class="v">${esc_(r[1] || '')}</td></tr>`).join('');
-  const lines = (c.lines || []).map(l => `<tr class="${l.total ? 'grand' : (l.bold ? 'tot' : '')}">
+    .map(r => [esc_(r[0]), esc_(r[1] || '')]));
+  const resRows = kv([
+    ['Cena mēnesī bez PVN', `<span class="big">${eur_(c.bezPVN)}</span>`],
+    ['Cena gadā bez PVN', `<b>${eur_(c.bezPVN * 12)}</b>`],
+    ['Uzk. izd. = € / dzīvokļu m² bez PVN', `<b>${c.perM2bez == null ? '—' : '€' + num_(c.perM2bez, 4)}</b>`],
+    ['Cena mēnesī ar PVN (' + pct_(d.param.pvn, 0) + ')', eur_(c.arPVN)]]);
+  const lines = (c.lines || []).map((l, i) => `<tr class="${l.total ? 'grand' : (l.bold ? 'tot' : (i % 2 ? 'z' : ''))}">
       <td class="muted">${esc_(l.nr || '')}</td><td>${esc_(l.name)}</td>
       <td class="r">${eur_(l.men)}</td><td class="r">${eur_(l.gada)}</td>
       <td class="r">${l.dala == null ? '' : pct_(l.dala)}</td></tr>`).join('');
-  const darbi = (c.darbi || []).map(x => `<tr><td>${esc_(x.nosaukums)}</td><td>${esc_(x.izp)}</td>
+  const darbi = (c.darbi || []).map((x, i) => `<tr${zebra(i)}><td>${esc_(x.nosaukums)}</td><td>${esc_(x.izp)}</td>
       <td class="r">${num_(x.area)}</td><td class="r">${num_(x.reizes, 2)}</td><td class="r">${num_(x.raziba)}</td>
       <td class="r">${num_(x.h, 1)}</td><td class="r">${eur_(x.cost)}</td></tr>`).join('');
-  const sez = (c.sezon || []).map(x => `<tr><td>${esc_(x.nosaukums)}</td><td class="r">${num_(x.area)}</td>
+  const sez = (c.sezon || []).map((x, i) => `<tr${zebra(i)}><td>${esc_(x.nosaukums)}</td><td class="r">${num_(x.area)}</td>
       <td class="r">${num_(x.cena, 3)}</td><td class="r">${num_(x.reizes)}</td><td class="r">${eur_(x.gada)}</td>
       <td class="r">${eur_(x.men)}</td></tr>`).join('');
   const invRows = [].concat((d.invIek || []).filter(x => x.on).map(x => ['Iekštelpas', x]), (d.invPag || []).filter(x => x.on).map(x => ['Pagalms', x]))
-    .map(a => `<tr><td class="muted">${a[0]}</td><td>${esc_(a[1].nosaukums)}</td><td class="muted">${esc_(a[1].apraksts || '')}</td><td class="r">${eur_(a[1].cena)}</td></tr>`).join('');
+    .map((a, i) => `<tr${zebra(i)}><td class="muted">${a[0]}</td><td>${esc_(a[1].nosaukums)}</td><td class="muted">${esc_(a[1].apraksts || '')}</td><td class="r">${eur_(a[1].cena)}</td></tr>`).join('');
+  const th = (cols) => '<tr>' + cols.map((h, i) => `<th class="${[i === 0 ? 'f' : '', i === cols.length - 1 ? 'l' : '', h[1] ? 'r' : ''].join(' ').trim()}">${h[0]}</th>`).join('') + '</tr>';
+  const sq = (col) => `<td style="background:${col}">&nbsp;</td>`;
+  const idTxt = meta.id ? esc_(meta.id) + (meta.versija ? ' · v' + meta.versija : '') : '';
+  const head = (kind) => `<table class="hd"><tr>
+    <td style="width:44px"><div class="logo"><table><tr>${sq('#d6e8e1')}${sq('#f4e4b4')}</tr><tr>${sq('#d8e6f2')}${sq('#e2ddf2')}</tr></table></div></td>
+    <td><div class="brand">SELECTUM HOME</div><div class="kind">${kind}</div></td>
+    <td class="when">${o.sagatavots ? 'Sagatavots <b>' + esc_(lvDate_(o.sagatavots)) + '</b>' : ''}${idTxt ? '<br>' + idTxt : ''}</td></tr></table>`;
+  const foot = `<table class="ft"><tr><td>SELECTUM HOME · vaitkevix.cloud/sh</td><td style="text-align:right">${copy_()}</td></tr></table>`;
+  const minChip = c.minOk ? `<span class="chip" style="background:#d6e8e1;color:${GOOD}">atbilst</span>` : `<span class="chip" style="background:#f5dbe3;color:${BAD}">ZEM MINIMĀLĀS ALGAS</span>`;
   return `<html><head><meta charset="utf-8"><style>${css}</style></head><body>
-  <h1>Sanitārās apkopes tāme</h1>
-  <div class="sub">Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».${meta.id ? ' · ' + esc_(meta.id) + (meta.versija ? ' (v' + meta.versija + ')' : '') : ''}</div>
-  <table><tr><td style="width:50%;vertical-align:top;padding:0 10px 0 0;border:0">
-    <table class="obj"><tr><th colspan="2">Objekts</th></tr>${objRows}</table>
-  </td><td style="vertical-align:top;padding:0;border:0">
-    <table class="res"><tr><th colspan="2">Rezultāts</th></tr>
-    <tr><td>Cena mēnesī bez PVN</td><td class="r big">${eur_(c.bezPVN)}</td></tr>
-    <tr><td class="muted">Cena gadā bez PVN</td><td class="r"><b>${eur_(c.bezPVN * 12)}</b></td></tr>
-    <tr><td class="muted">Uzk. izd. = € / dzīvokļu m² bez PVN</td><td class="r"><b>${c.perM2bez == null ? '—' : '€' + num_(c.perM2bez, 4)}</b></td></tr>
-    <tr><td class="muted">Cena mēnesī ar PVN (${pct_(d.param.pvn, 0)})</td><td class="r">${eur_(c.arPVN)}</td></tr></table>
-  </td></tr></table>
+  ${head('Budžets · uzkopšanas tāme')}
+  <div class="band"><h1>Sanitārās apkopes tāme</h1>
+  <div class="sub">Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».${meta.id ? ' · ' + esc_(meta.id) + (meta.versija ? ' (v' + meta.versija + ')' : '') : ''}</div></div>
+  <table><tr><td class="card" style="width:50%"><div class="cap">Objekts</div><table class="kv">${objRows}</table></td>
+  <td style="width:12px;padding:0;border:0"></td>
+  <td class="card"><div class="cap">Rezultāts</div><table class="kv">${resRows}</table></td></tr></table>
   <h2>Tāme</h2>
-  <table><tr><th>Nr.</th><th>Pozīcija (MK 408 — 1.1. Sanitārā apkope)</th><th class="r">Mēnesī</th><th class="r">Gadā</th><th class="r">Daļa</th></tr>${lines}</table>
-  <div class="foot">Pilnā stundas cena: apkopēja ${eur_(c.fullA)}, sētnieks ${eur_(c.fullS)} (ar atvaļinājuma rezervi un VSAOI). Neproduktīvais laiks ${pct_(d.param.neprod, 0)}. Minimālās algas pārbaude: ${c.minOk ? 'atbilst' : 'ZEM MINIMĀLĀS ALGAS'}.</div>
-  <div class="copy">${copy_()}</div>
+  <table class="t">${th([['Nr.'], ['Pozīcija (MK 408 — 1.1. Sanitārā apkope)'], ['Mēnesī', 1], ['Gadā', 1], ['Daļa', 1]])}${lines}</table>
+  <div class="note">Pilnā stundas cena: apkopēja ${eur_(c.fullA)}, sētnieks ${eur_(c.fullS)} (ar atvaļinājuma rezervi un VSAOI). Neproduktīvais laiks ${pct_(d.param.neprod, 0)}. Minimālās algas pārbaude: ${minChip}.</div>
+  ${foot}
 
   <div class="pb"></div>
+  ${head('Budžets · tāmes pielikumi')}
   <h2>Pielikums 1 — Regulārie darbi</h2>
-  <table><tr><th>Darbs</th><th>Izpildītājs</th><th class="r">m²</th><th class="r">Reizes/mēn.</th><th class="r">m²/h</th><th class="r">h/mēn.</th><th class="r">€/mēn.</th></tr>${darbi}
+  <table class="t">${th([['Darbs'], ['Izpildītājs'], ['m²', 1], ['Reizes/mēn.', 1], ['m²/h', 1], ['h/mēn.', 1], ['€/mēn.', 1]])}${darbi}
   <tr class="tot"><td colspan="5">Kopā</td><td class="r">${num_(c.hA + c.hS, 1)}</td><td class="r">${eur_(c.darbiCost)}</td></tr></table>
   <h2>Pielikums 2 — Sezonālie darbi</h2>
-  <table><tr><th>Darbs</th><th class="r">Platība</th><th class="r">Cena reizē</th><th class="r">Reizes gadā</th><th class="r">Gadā</th><th class="r">Mēnesī</th></tr>${sez}
+  <table class="t">${th([['Darbs'], ['Platība', 1], ['Cena reizē', 1], ['Reizes gadā', 1], ['Gadā', 1], ['Mēnesī', 1]])}${sez}
   <tr class="tot"><td colspan="4">Kopā</td><td class="r">${eur_(c.sezonGada)}</td><td class="r">${eur_(c.sezonMen)}</td></tr></table>
   <h2>Pielikums 3 — Inventārs</h2>
-  <table><tr><th>Grupa</th><th>Pozīcija</th><th>Apraksts</th><th class="r">Cena</th></tr>${invRows}
+  <table class="t">${th([['Grupa'], ['Pozīcija'], ['Apraksts'], ['Cena', 1]])}${invRows}
   <tr class="tot"><td colspan="3">Kopā (nolietojums ${d.param.invMen} mēn. → ${eur_(c.inv)} mēnesī)</td><td class="r">${eur_(c.invTotal)}</td></tr></table>
-  <div class="copy">${copy_()}</div>
+  ${foot}
   </body></html>`;
 }
 
@@ -767,11 +868,11 @@ function publicSettings_() { return { vadibasEpasti: settingList_('Vadības e-pa
 
 /* ---------------- E-pasts ---------------- */
 function mailWrap_(inner) {
-  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1b1f1d;max-width:560px">
-    <div style="background:#0f6b5c;color:#fff;padding:14px 18px;border-radius:10px 10px 0 0;font-weight:bold;font-size:16px">SH | Budžets</div>
-    <div style="border:1px solid #dfe7e2;border-top:0;padding:18px;border-radius:0 0 10px 10px">${inner}
-    <p style="margin-top:18px"><a href="${APP_URL}" style="background:#0f6b5c;color:#fff;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:bold">Atvērt SH | Budžets</a></p></div>
-    <p style="color:#8a8a8a;font-size:11px;text-align:center;margin-top:10px">${copy_()}</p></div>`;
+  return `<div style="font-family:Manrope,-apple-system,'Segoe UI',Arial,Helvetica,sans-serif;font-size:14px;color:#17201c;max-width:560px">
+    <div style="background:#e2ddf2;padding:14px 18px;border-radius:14px 14px 0 0;font-weight:800;font-size:16px;letter-spacing:-.02em">SELECTUM HOME <span style="font-weight:600;color:#4a534f">· Budžets</span></div>
+    <div style="background:#ffffff;border:1px solid #dfe5e2;border-top:0;padding:18px;border-radius:0 0 14px 14px">${inner}
+    <p style="margin-top:18px"><a href="${APP_URL}" style="background:#17201c;color:#fff;text-decoration:none;padding:10px 16px;border-radius:999px;font-weight:700">Atvērt SH | Budžets</a></p></div>
+    <p style="color:#6d7672;font-size:11px;margin-top:10px">SELECTUM HOME · vaitkevix.cloud/sh · ${copy_()}</p></div>`;
 }
 function mailNotice_(to, subject, inner, attachments) {
   MailApp.sendEmail({ to: to, subject: subject, htmlBody: mailWrap_(inner), name: settings_()['Sūtītāja vārds'] || APP_NAME, attachments: attachments || [] });
@@ -786,13 +887,13 @@ function mailBudget_(u, meta, d, c, to, kind, note, attach) {
   if (attach) atts.push(Utilities.newBlob(pdfHtml_(d, c, meta), 'text/html', 'tame.html').getAs('application/pdf').setName(fileName_(d, meta) + '.pdf'));
   const inner = `<p>${kind === 'iesniegts' ? `<b>${esc_(u.name)}</b> iesniedza budžetu izskatīšanai.` : `<b>${esc_(u.name)}</b> nosūtīja budžetu.`}</p>
     <table style="border-collapse:collapse;width:100%;font-size:14px">
-      <tr><td style="padding:6px 0;color:#6d7470">Objekts</td><td style="padding:6px 0;text-align:right"><b>${esc_(nos)}</b></td></tr>
-      <tr><td style="padding:6px 0;color:#6d7470">Adrese</td><td style="padding:6px 0;text-align:right">${esc_(o.adrese || '—')}</td></tr>
-      <tr><td style="padding:6px 0;color:#6d7470">Budžets</td><td style="padding:6px 0;text-align:right">${esc_(meta.id || '')}${meta.versija ? ' · v' + meta.versija : ''}</td></tr>
-      <tr><td style="padding:6px 0;color:#6d7470">Cena mēnesī bez PVN</td><td style="padding:6px 0;text-align:right;font-size:18px"><b>${eur_(c.bezPVN)}</b></td></tr>
-      ${c.perM2bez != null ? `<tr><td style="padding:6px 0;color:#6d7470">€ / dzīvokļu m²</td><td style="padding:6px 0;text-align:right">€${num_(c.perM2bez, 4)}</td></tr>` : ''}
-    </table>${note ? `<p style="background:#eef4f1;padding:10px 12px;border-radius:8px">Piezīme: ${esc_(note)}</p>` : ''}
-    ${attach ? '<p style="color:#6d7470">Tāme ar pielikumiem — PDF failā.</p>' : ''}`;
+      <tr><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;color:#6d7672">Objekts</td><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;text-align:right"><b>${esc_(nos)}</b></td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;color:#6d7672">Adrese</td><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;text-align:right">${esc_(o.adrese || '—')}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;color:#6d7672">Budžets</td><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;text-align:right">${esc_(meta.id || '')}${meta.versija ? ' · v' + meta.versija : ''}</td></tr>
+      <tr><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;color:#6d7672">Cena mēnesī bez PVN</td><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;text-align:right;font-size:18px"><b>${eur_(c.bezPVN)}</b></td></tr>
+      ${c.perM2bez != null ? `<tr><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;color:#6d7672">€ / dzīvokļu m²</td><td style="padding:6px 0;border-bottom:1px solid #dfe5e2;text-align:right">€${num_(c.perM2bez, 4)}</td></tr>` : ''}
+    </table>${note ? `<p style="background:#f3f5f4;padding:10px 12px;border-radius:12px">Piezīme: ${esc_(note)}</p>` : ''}
+    ${attach ? '<p style="color:#6d7672">Tāme ar pielikumiem — PDF failā.</p>' : ''}`;
   mailNotice_(to.join(','), (kind === 'iesniegts' ? 'Iesniegts budžets: ' : 'Budžets: ') + nos + ' — ' + eur_(c.bezPVN) + '/mēn. bez PVN', inner, atts);
   log_(u.name, 'E-pasts', meta.id || '', to.join(', '));
   return to;
