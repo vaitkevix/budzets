@@ -5,16 +5,50 @@
 (function () {
   if (window.__shKad) return; window.__shKad = 1;
   const APP = 'https://vaitkevix.github.io/budzets/';
-  const G = '#0f6b5c';
-  const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;right:16px;top:16px;z-index:2147483647;width:360px;max-height:85vh;overflow:auto;padding:16px;border-radius:14px;background:#fff;color:#1b1f1d;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 18px 50px -12px rgba(0,0,0,.45);border:1px solid #d9e3de';
-  box.innerHTML = '<b style="font-size:15px;color:' + G + '">SH | Budžets · kadastrs</b><div id="shk_s" style="margin-top:8px">Sāku…</div><div style="height:6px;border-radius:4px;background:#e8efe9;margin-top:10px;overflow:hidden"><i id="shk_p" style="display:block;height:100%;width:3%;background:' + G + ';transition:width .2s"></i></div><div style="display:flex;align-items:center;gap:8px;margin-top:12px"><button id="shk_x" style="border:0;background:#eef2ef;border-radius:8px;padding:7px 12px;cursor:pointer">Aizvērt</button><span style="margin-left:auto;font-size:11px;color:#8a938f">© ' + new Date().getFullYear() + ' VAITKEVIX, SIA</span></div>';
-  document.body.appendChild(box);
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;right:16px;top:16px;z-index:2147483647;width:min(384px,calc(100vw - 32px))';
+  const root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+  root.innerHTML = '<style>' +
+    ':host,.w{all:initial}' +
+    '.w{--acc:#e2ddf2;--bg:#f1f4f2;--surf:#fff;--surf2:#f3f5f4;--ink:#17201c;--ink2:#4a534f;--ink3:#6d7672;--dark:#17201c;--ondark:#fff;--err:#b42318;' +
+      'display:block;max-height:calc(100vh - 32px);overflow:auto;box-sizing:border-box;padding:12px;border-radius:32px;background:var(--bg);color:var(--ink);' +
+      'font:15px/1.45 Manrope,system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 24px 60px -16px rgba(16,32,26,.45)}' +
+    '@media (prefers-color-scheme:dark){.w{--acc:#2c2840;--bg:#0b120f;--surf:#151d1a;--surf2:#1b2521;--ink:#eef2ef;--ink2:#b4bdb8;--ink3:#8b958f;--dark:#eef2ef;--ondark:#0b120f;--err:#ff8a80}}' +
+    '.w *{box-sizing:border-box;font:inherit;color:inherit}' +
+    '.hero{position:relative;padding:20px 20px 18px;border-radius:28px;background:var(--acc)}' +
+    '.kick{display:block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}' +
+    '.h{display:block;margin-top:4px;font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.1}' +
+    '.x{position:absolute;right:12px;top:12px;width:40px;height:40px;border:0;border-radius:50%;background:var(--surf);cursor:pointer;font-size:20px;line-height:40px;text-align:center;padding:0}' +
+    '.bar{display:block;height:8px;margin-top:16px;border-radius:999px;background:rgba(255,255,255,.55);overflow:hidden}' +
+    '.bar i{display:block;height:100%;width:3%;border-radius:999px;background:var(--dark);transition:width .25s}' +
+    '.card{display:block;margin-top:8px;padding:16px 18px;border-radius:28px;background:var(--surf)}' +
+    '.card b{font-weight:800}' +
+    '.mut{display:block;margin-top:6px;font-size:13px;color:var(--ink3)}' +
+    '.err{color:var(--err);font-weight:700}' +
+    '.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}' +
+    '.st{display:block;padding:12px 14px;border-radius:20px;background:var(--surf2)}' +
+    '.st b{display:block;font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.15}' +
+    '.st span{display:block;font-size:12px;font-weight:700;color:var(--ink3)}' +
+    '.row{display:flex;gap:8px;margin-top:12px}' +
+    '.btn{display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border:0;border-radius:999px;cursor:pointer;font-weight:800;text-decoration:none;text-align:center}' +
+    '.p{flex:1;background:var(--dark);color:var(--ondark)}' +
+    '.s{background:var(--surf2)}' +
+    '.full{width:100%;margin-top:12px}' +
+    '.pick{display:flex;gap:12px;align-items:flex-start;margin-top:8px;padding:12px 14px;border-radius:20px;background:var(--surf2);cursor:pointer}' +
+    '.pick input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--dark);flex:none}' +
+    '.pick small{display:block;font-size:13px;color:var(--ink3)}' +
+    '.foot{display:block;padding:10px 6px 2px;text-align:center;font-size:11px;color:var(--ink3)}' +
+    '</style><div class="w"><div class="hero"><span class="kick">SH | Budžets</span><span class="h">Kadastrs → budžets</span>' +
+    '<button class="x" id="shk_x" title="Aizvērt" aria-label="Aizvērt">×</button><span class="bar"><i id="shk_p"></i></span></div>' +
+    '<div class="card" id="shk_s">Sāku…</div><span class="foot">© ' + new Date().getFullYear() + ' VAITKEVIX, SIA</span></div>';
+  document.body.appendChild(host);
+  const box = root;
   const $s = () => box.querySelector('#shk_s');
   const st = (t, p) => { $s().innerHTML = t; if (p != null) box.querySelector('#shk_p').style.width = Math.max(3, p) + '%'; };
-  box.querySelector('#shk_x').onclick = () => { box.remove(); window.__shKad = 0; };
-  const fail = (t) => { st('<span style="color:#c02626">' + t + '</span>'); window.__shKad = 0; };
+  box.querySelector('#shk_x').onclick = () => { host.remove(); window.__shKad = 0; };
+  const fail = (t) => { st('<span class="err">' + t + '</span>'); window.__shKad = 0; };
   const esc = (s) => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const nf = (n) => n == null ? '—' : Number(n).toLocaleString('lv-LV', { maximumFractionDigits: 1 });
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const get = async (u) => {
@@ -85,10 +119,10 @@
       let chosen = blds;
       if (blds.length > 1) {
         const cnt = (b) => groups.filter(g => g.t.indexOf(b.t) === 0).length;
-        st('Uz zemes vienības ir <b>' + blds.length + ' būves</b>. Atzīmē, kuras iekļaut budžetā:' +
-          blds.map((b, i) => '<label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;cursor:pointer"><input type="checkbox" data-i="' + i + '" ' + (cnt(b) ? 'checked' : '') + ' style="margin-top:3px">' +
-            '<span><b>' + esc(b.t) + '</b><br><span style="color:#6d7470">' + esc(addrOf(b.row) || '—') + ' · ' + cnt(b) + ' telpu grupas</span></span></label>').join('') +
-          '<button id="shk_go" style="margin-top:12px;width:100%;border:0;background:' + G + ';color:#fff;font-weight:700;border-radius:9px;padding:10px;cursor:pointer">Nolasīt izvēlētās</button>', 5);
+        st('Uz zemes vienības ir <b>' + blds.length + ' būves</b>.<span class="mut">Atzīmē, kuras iekļaut budžetā.</span>' +
+          blds.map((b, i) => '<label class="pick"><input type="checkbox" data-i="' + i + '" ' + (cnt(b) ? 'checked' : '') + '>' +
+            '<span><b>' + esc(b.t) + '</b><small>' + esc(addrOf(b.row) || '—') + ' · ' + cnt(b) + ' telpu grupas</small></span></label>').join('') +
+          '<button class="btn p full" id="shk_go">Nolasīt izvēlētās</button>', 5);
         await new Promise(res => { box.querySelector('#shk_go').onclick = res; });
         chosen = [...box.querySelectorAll('input[data-i]')].filter(c => c.checked).map(c => blds[+c.dataset.i]);
         if (!chosen.length) return fail('Nav izvēlēta neviena būve.');
@@ -106,10 +140,15 @@
       const enc = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const url = APP + '#kadastrs=' + enc;
       const dz = res.reduce((s, k) => s + k.dzivokli, 0), m2 = res.reduce((s, k) => s + k.telpas.reduce((a, x) => a + x.m2, 0), 0);
-      st('<b>Gatavs.</b> ' + res.length + (res.length > 1 ? ' būves · ' : ' būve · ') + dz + ' dzīvokļi · koplietošanas ' + m2.toFixed(1) + ' m²' +
-        '<div style="margin-top:6px;color:#6d7470;font-size:12.5px">Budžetā izvēlies: jauns budžets vai pievienot esošam (dalītai mājai — katru daļu pēc kārtas).</div>' +
-        '<div style="margin-top:10px;display:flex;gap:8px"><a href="' + url + '" target="_blank" style="flex:1;text-align:center;background:' + G + ';color:#fff;text-decoration:none;font-weight:700;padding:9px;border-radius:9px">Atvērt Budžetā</a>' +
-        '<button id="shk_c" style="border:0;background:#eef2ef;border-radius:9px;padding:9px 12px;cursor:pointer">Kopēt</button></div>', 100);
+      const zm = res[0] && res[0].zeme_m2, adr = res.map(k => k.adrese || k.buve).filter(Boolean).join('; ');
+      st('<b>Gatavs ✓</b>' + (adr ? '<span class="mut">' + esc(adr) + '</span>' : '') +
+        '<div class="stats"><div class="st"><b>' + res.length + '</b><span>' + (res.length > 1 ? 'būves' : 'būve') + '</span></div>' +
+        '<div class="st"><b>' + dz + '</b><span>dzīvokļi</span></div>' +
+        '<div class="st"><b>' + nf(m2) + '</b><span>koplietošanas m²</span></div>' +
+        '<div class="st"><b>' + nf(zm) + '</b><span>zeme m²</span></div></div>' +
+        '<span class="mut">Budžetā izvēlies: jauns budžets vai pievienot esošam (dalītai mājai — katru daļu pēc kārtas).</span>' +
+        '<div class="row"><a class="btn p" href="' + url + '" target="_blank" rel="noopener">Atvērt Budžetā</a>' +
+        '<button class="btn s" id="shk_c">Kopēt</button></div>', 100);
       box.querySelector('#shk_c').onclick = () => { navigator.clipboard.writeText('SHBUDZETS ' + json).then(() => box.querySelector('#shk_c').textContent = 'Nokopēts ✓'); };
       window.__shKadData = payload; window.__shKad = 0;
     } catch (e) { fail('Kļūda: ' + e.message); }
