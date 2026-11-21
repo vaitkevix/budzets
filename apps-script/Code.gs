@@ -147,6 +147,12 @@ function usersRead_() {
 function auth_(pin) {
   pin = String(pin || '').trim();
   if (!pin) return null;
+  const cu = centralUser_(pin, 'budz');
+  if (cu.known) {
+    if (!cu.role) return null;
+    const loc = users_().find(x => x.name.toLowerCase() === String(cu.name).toLowerCase());
+    return { name: cu.name, role: cu.role, email: loc && loc.email || '' };
+  }
   const u = users_().find(x => x.pin === pin);
   return u ? { name: u.name, role: u.role, email: u.email || '' } : null;
 }
@@ -845,3 +851,23 @@ const SERIJAS = { pirmskara: 'Pirmskara ēka', koka: 'Koka māja', stalina: 'Sta
   '602u': '602. uzlabotā sērija', '119': '119. sērija', '104': '104. sērija', mazgim: 'Mazģimeņu projekts', cehu: 'Čehu projekts', franc: 'Franču projekts',
   brezn: 'Brežņeva laika projekts', spec: 'Specprojekts', jauns: 'Jaunais projekts', cits: 'Cits' };
 function serijaName_(k) { return k ? (SERIJAS[k] || String(k)) : '—'; }
+
+/* ===== Vienotais PIN no SH portāla (pilnvaras mainās portālā vaitkevix.cloud/sh). © VAITKEVIX, SIA ===== */
+const PORTAL_URL_ = 'https://aizvietosana-api.vaitkevix.workers.dev/portal';
+/** { known:false } — PIN portālā nav; { known:true, name, role } — role '' nozīmē: nav piekļuves */
+function centralUser_(pin, app) {
+  pin = String(pin || '').trim(); if (!pin) return { known: false };
+  const key = 'cu_' + app + '_' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'sh|' + pin)).slice(0, 30);
+  const cache = CacheService.getScriptCache(), c = cache.get(key);
+  if (c) return JSON.parse(c);
+  try {
+    const r = UrlFetchApp.fetch(PORTAL_URL_, { method: 'post', contentType: 'text/plain', payload: JSON.stringify({ action: 'check', pin: pin, app: app }), muteHttpExceptions: true });
+    const j = JSON.parse(r.getContentText());
+    if (!j.ok) return { known: false };
+    const out = j.known ? { known: true, name: j.name, role: j.role || '' } : { known: false };
+    cache.put(key, JSON.stringify(out), 300);
+    return out;
+  } catch (e) { return { known: false }; }
+}
+/** Palaid vienreiz no redaktora, lai atļautu savienojumu ar portālu */
+function parbauditPortalu() { return centralUser_('0', 'test'); }
