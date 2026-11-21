@@ -8,9 +8,9 @@
 <script>if (/android/i.test(navigator.userAgent)) document.querySelector('meta[name=viewport]').setAttribute('content', 'width=device-width, initial-scale=1');</script>
 <title>SH | Budžets</title>
 <link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/svg+xml" href="icons/apps/budzets.svg">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/apps/budzets-32.png">
-<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/svg+xml" href="icons/apps/budzets.svg?v=3">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/apps/budzets-32.png?v=3">
+<link rel="apple-touch-icon" href="icon.png?v=3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="SH | Budžets">
@@ -22,9 +22,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
 <script>
-  (function () { var t; try { t = localStorage.getItem('darbi_theme'); } catch (e) {}
-    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', t); })();
+  // Tēma kopīga ar SH portālu (localStorage sh_theme); bez atslēgas — gaišā
+  (function () { var t; try { t = localStorage.getItem('sh_theme'); } catch (e) {}
+    document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light'); })();
 </script>
 <script src="config.js?v=2"></script>
 <script src="serijas.js"></script>
@@ -749,7 +749,8 @@
   :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 </style>
 
-<!--SH-THEME--><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap"><link rel="stylesheet" href="sh-theme.css?v=1"><script>document.documentElement.setAttribute("data-sh","budz")</script><!--/SH-THEME-->
+
+<!--SH-THEME--><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap"><link rel="stylesheet" href="sh-theme.css?v=2"><script>/*SH tēma: kopīga ar portālu (sh_theme), mainās uzreiz*/(function(d){d.setAttribute("data-sh","budz");function a(t){d.setAttribute("data-theme",t==="dark"?"dark":"light")}try{a(localStorage.getItem("sh_theme"))}catch(e){}addEventListener("storage",function(e){if(e.key==="sh_theme")a(e.newValue)});addEventListener("message",function(e){var m=e.data;if(e.origin===location.origin&&m&&m.sh==="theme")a(m.t)})})(document.documentElement)</script><!--/SH-THEME-->
 </head>
 <body>
 <div class="app no-tabs" id="app">
@@ -757,7 +758,7 @@
   <div class="topbar-inner">
     <div class="brand-row">
       <button class="icon-btn bk-btn" id="backBtn" aria-label="Atpakaļ uz sarakstu" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <div class="logo" id="logoBox"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M15 12.4a3.1 3.1 0 1 0 0 4.4M8.8 13.7h4.4M8.8 15.6h4.4"/></svg></div>
+      <div class="logo" id="logoBox"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 2.5h13v19l-3.2-2.1-3.3 2.1-3.3-2.1-3.2 2.1z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg></div>
       <div class="brand-text">
         <h1>SH | Budžets</h1>
         <p id="brandSub">Uzkopšanas tāmes · budžeti</p>
@@ -901,7 +902,7 @@ function toast(msg, type){
 function busyBtn(btn, on, label){ if(!btn) return; btn.disabled=on; if(on){ btn.dataset.l=btn.innerHTML; btn.innerHTML='<span class="spinner"></span>'; } else btn.innerHTML=label||btn.dataset.l||''; }
 
 /* ---------- Tēma ---------- */
-$('themeBtn').onclick = () => { const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',t); ls.set('darbi_theme',t); };
+$('themeBtn').onclick = () => { const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme',t); ls.set('sh_theme',t); };
 
 /* ---------- Lapa no apakšas ---------- */
 function openSheet(html, narrow){ $('sheetBody').innerHTML=html; $('sheet').classList.toggle('narrow',!!narrow); $('sheet').classList.add('open'); $('backdrop').classList.add('open'); }
