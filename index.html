@@ -1075,7 +1075,8 @@ function drawStats(){
       const rows=Object.entries(m).map(([k,x])=>[k,x.s/x.p,x.n]).sort((a,b)=>b[1]-a[1]); const mx=Math.max(0.0001,...rows.map(r=>r[1]));
       return `<div class="card bar-card"><h4>Vid. € / dzīv. m² bez PVN pa sērijām</h4>${rows.map(([k,v,n])=>`<div class="bar-row" style="grid-template-columns:minmax(120px,48%) 1fr auto"><div class="n" style="white-space:normal;line-height:1.2">${k?serSvg(k,30):''}<span>${esc(k?SER.name(k):'Nav norādīta')} <span class="muted">· ${n}</span></span></div><div class="bar"><span style="width:${Math.round(v/mx*100)}%"></span></div><div class="m">${eur4(v)}</div></div>`).join('')||'<div class="muted">Nav datu</div>'}</div>`; })()}
     <button class="btn btn-glass btn-block" id="listXlsBtn">${IC.xls} Visu budžetu saraksts Excel</button>`;
-  $('listXlsBtn').onclick=async()=>{ const b=$('listXlsBtn'); busyBtn(b,true); try{ const r=await api('listXlsx',{ids:[]}); download(r.file); }catch(err){ toast(netMsg(err),'err'); } finally{ busyBtn(b,false); } };
+  $('listXlsBtn').onclick=async()=>{ const b=$('listXlsBtn'); busyBtn(b,true); try{ const d=new Date(), ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    download({ name:'Budžetu saraksts '+ymd+'.xlsx', mime:XLSX_MIME, b64: await xlsxList(S.list) }); }catch(err){ toast(netMsg(err),'err'); } finally{ busyBtn(b,false); } };
 }
 
 /* ================== Noklusējuma budžets (no Hipokrāta 24A veidnes) ================== */
@@ -1639,7 +1640,7 @@ function mailSheet(){
   $('mailGo').onclick=async()=>{ const to=$('mailTo').value.trim(); if(!/@/.test(to)) return toast('Ievadiet e-pasta adresi','err');
     const b=$('mailGo'); busyBtn(b,true); const c=calc(S.d), co=Object.assign({},c); delete co.rowCalc;
     const meta={id:S.id||'',versija:S.histVer||(S.meta&&S.meta.versija)||'',autors:(S.meta&&S.meta.autors)||S.user.name,statuss:(S.meta&&S.meta.statuss)||'Melnraksts'};
-    try{ const r=await api('sendPdf',{id:S.id, data:S.d, calc:co, meta, to, piezime:$('mailNote').value}); closeSheet(); toast('Nosūtīts: '+(r.sent||[]).join(', '),'ok'); }
+    try{ const pf=await pdfFile(co, meta); const r=await api('sendPdf',{id:S.id, data:S.d, calc:co, meta, to, piezime:$('mailNote').value, pdfB64:pf&&pf.b64}); closeSheet(); toast('Nosūtīts: '+(r.sent||[]).join(', '),'ok'); }
     catch(err){ toast(netMsg(err),'err'); busyBtn(b,false); } };
 }
 
@@ -1688,7 +1689,8 @@ async function save(statuss, piezime, sutit){
   const c=calc(S.d), co=Object.assign({},c); delete co.rowCalc;
   const b=$('saveBtn'); busyBtn(b,true);
   try{
-    const r=await api('save',{id:S.id, data:S.d, calc:co, statuss:statuss||null, piezime:piezime||'', sutitVadibai:!!sutit});
+    let pdfB64=''; if(sutit){ try{ const pf=await pdfFile(co,{id:S.id||'',versija:'',autors:(S.meta&&S.meta.autors)||S.user.name,statuss:statuss||'Iesniegts'}); pdfB64=pf&&pf.b64||''; }catch(e){} }
+    const r=await api('save',{id:S.id, data:S.d, calc:co, statuss:statuss||null, piezime:piezime||'', sutitVadibai:!!sutit, pdfB64});
     S.id=r.id; S.meta=Object.assign({},S.meta,{id:r.id,versija:r.versija,statuss:r.statuss,autors:S.meta.autors||S.user.name});
     S.meta.atjaunots=r.atjaunots; S.dirty=false; S.aiUndo=null; draft.clear();
     bcache.set(r.id,{meta:S.meta,data:JSON.parse(JSON.stringify(S.d))});
@@ -1734,7 +1736,116 @@ async function exp(kind){
   const c=calc(S.d), co=Object.assign({},c); delete co.rowCalc;
   const meta={id:S.id||'',versija:S.histVer||(S.meta&&S.meta.versija)||'',autors:(S.meta&&S.meta.autors)||S.user.name,statuss:(S.meta&&S.meta.statuss)||'Melnraksts'};
   toast(kind==='pdf'?'Gatavo PDF…':'Gatavo Excel…');
-  try{ const r=await api(kind,{id:S.id, data:S.d, calc:co, meta}); download(r.file); }catch(err){ toast(netMsg(err),'err'); }
+  try{
+    if(kind==='xlsx'){ download({ name:fileBase(S.d,meta)+'.xlsx', mime:XLSX_MIME, b64: await xlsxTame(S.d, co, meta) }); return; }
+    download(await pdfFile(co, meta));
+  }catch(err){ toast(netMsg(err),'err'); }
+}
+/* ---- PDF un Excel pārlūkā (Cloudflare versija; agrāk veidoja Google). © VAITKEVIX, SIA ---- */
+const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const libP={};
+function loadLib(url, ok){ if(ok()) return Promise.resolve(); return libP[url]||(libP[url]=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=url; s.onload=res; s.onerror=()=>{ delete libP[url]; rej(new Error('Neizdevās ielādēt bibliotēku')); }; document.head.appendChild(s); })); }
+const loadExcel=()=>loadLib('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',()=>!!self.ExcelJS);
+const loadPdf=()=>loadLib('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',()=>!!self.html2pdf);
+function fileBase(d,meta){ const o=(d&&d.objekts)||{}; return ('Tāme '+(o.nosaukums||o.adrese||(meta&&meta.id)||'budžets')).replace(/[\\/:*?"<>|]+/g,' ').trim().slice(0,90); }
+const bufB64=(buf)=>{ const b=new Uint8Array(buf); let s=''; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); };
+/** Servera HTML → PDF (base64) pārlūkā; vecais serveris atdod gatavu PDF */
+async function pdfFile(co, meta){
+  const r=await api('pdf',{id:S.id, data:S.d, calc:co, meta});
+  if(!r.file||!r.file.html) return r.file;
+  return { name:r.file.name, mime:'application/pdf', b64: await htmlPdf(r.file.html) };
+}
+async function htmlPdf(html){
+  const f=document.createElement('iframe'); f.style.cssText='position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0';
+  document.body.appendChild(f);
+  try{
+    await new Promise(res=>{ f.onload=res; f.srcdoc=html; });
+    const doc=f.contentDocument, win=f.contentWindow; await (doc.fonts&&doc.fonts.ready);
+    // bibliotēku ielādē pašā tāmes lapā, lai zīmējums paturētu tās stilu
+    await new Promise((res,rej)=>{ const sc=doc.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; sc.onload=res; sc.onerror=()=>rej(new Error('Neizdevās ielādēt PDF bibliotēku')); doc.head.appendChild(sc); });
+    const opt=win.JSON.parse(JSON.stringify({ margin:[10,10,12,10], image:{type:'jpeg',quality:0.92}, html2canvas:{scale:2,useCORS:true,windowWidth:794}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy']} }));   // iframe masīvi
+    const uri=await win.html2pdf().set(opt)
+      .from(doc.body).outputPdf('datauristring');
+    return uri.split(',')[1];
+  } finally { f.remove(); }
+}
+/* Excel — tas pats izkārtojums, ko veidoja Google (lapas Tāme, Platības, Darbi, Sezonālie darbi, Inventārs, Parametri) */
+async function xlsxTame(d, c, meta){
+  await loadExcel();
+  const o=d.objekts||{}, P=d.param||{}, EUR='#,##0.00 "€"', INK='FF17201C', INK2='FF4A534F', MUTE='FF6D7672', LINE='FFDFE5E2', SOFT='FFF3F5F4', ACC='FFE2DDF2';
+  const wb=new ExcelJS.Workbook(); wb.creator='VAITKEVIX, SIA'; wb.company='SELECTUM HOME';
+  const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}}), line={bottom:{style:'thin',color:{argb:LINE}}};
+  const subT=[o.nosaukums||o.adrese||'', o.adrese&&o.nosaukums?o.adrese:'', o.pasutitajs||'', lvDate(o.sagatavots)].filter(Boolean).join(' · ');
+  const copy='SELECTUM HOME · vaitkevix.cloud/sh · © '+new Date().getFullYear()+' VAITKEVIX, SIA. Visas tiesības aizsargātas.';
+  const title=(ws,t,sub,cols)=>{ ws.mergeCells(1,1,1,cols); const a=ws.getCell(1,1); a.value=t; a.font={size:16,bold:true,color:{argb:INK}}; a.alignment={vertical:'middle'};
+    for(let i=1;i<=cols;i++) ws.getCell(1,i).fill=fill(ACC); ws.getRow(1).height=34;
+    if(sub!=null){ ws.mergeCells(2,1,2,cols); const b=ws.getCell(2,1); b.value=sub; b.font={size:10,color:{argb:INK2}}; } };
+  const head=(ws,r,cols,right)=>{ const row=ws.getRow(r); row.height=24; for(let i=1;i<=cols;i++){ const x=row.getCell(i); x.fill=fill(INK); x.font={bold:true,size:10,color:{argb:'FFFFFFFF'}}; x.alignment={vertical:'middle',horizontal:(right||[]).includes(i)?'right':'left'}; } };
+  const body=(ws,r1,r2,cols)=>{ for(let r=r1;r<=r2;r++) for(let i=1;i<=cols;i++){ const x=ws.getCell(r,i); x.font=Object.assign({size:10,color:{argb:INK}},x.font&&x.font.bold?{bold:true}:{}); x.border=line; x.alignment=Object.assign({vertical:'middle'},x.alignment||{}); } };
+  const tot=(ws,r,cols,acc)=>{ for(let i=1;i<=cols;i++){ const x=ws.getCell(r,i); x.font={bold:true,size:10,color:{argb:INK}}; x.fill=fill(acc?ACC:SOFT); x.border={top:{style:'thin',color:{argb:INK}}}; } };
+  const fmt=(ws,r1,r2,col,f)=>{ for(let r=r1;r<=r2;r++) ws.getCell(r,col).numFmt=f; };
+  const put=(ws,r,rows)=>rows.forEach((v,i)=>ws.getRow(r+i).values=v);
+  const end=(ws)=>{ const r=ws.rowCount+2; ws.getCell(r,1).value=copy; ws.getCell(r,1).font={size:9,color:{argb:MUTE}}; };
+  const sheet=(name)=>wb.addWorksheet(name,{views:[{showGridLines:false}],pageSetup:{paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0}});
+  // Tāme
+  const t=sheet('Tāme'); title(t,'Sanitārās apkopes tāme','Struktūra atbilst MK noteikumu Nr. 408 tāmes pozīcijai «1.1. Dzīvojamās mājas sanitārā apkope».',5);
+  const obj=[['Nosaukums',o.nosaukums||''],['Adrese',o.adrese||''],['Pasūtītājs',o.pasutitajs||''],['Ēkas sērija',(o.serija?SER.name(o.serija):'—')+(o.gads?' · '+o.gads+'. g.':'')+(o.stavi?' · '+o.stavi+' st.':'')],
+    ['Sagatavots',lvDate(o.sagatavots)],['Izpildītājs',o.izpilditajs||''],['Dzīvokļi / dzīvokļu m²',(o.dzivokli||'')+' / '+(o.lietderiga||'')],['Budžeta ID',meta.id||''],['Autors',meta.autors||''],['Statuss',meta.statuss||'']];
+  obj.forEach((v,i)=>{ t.getCell(4+i,1).value=v[0]; t.getCell(4+i,2).value=v[1]; }); body(t,4,3+obj.length,2); for(let i=0;i<obj.length;i++) t.getCell(4+i,1).font={size:10,color:{argb:MUTE}};
+  [['Cena mēnesī bez PVN',c.bezPVN],['Cena mēnesī ar PVN',c.arPVN],['Uzk. izd. = € / dzīvokļu m² (bez PVN)',c.perM2bez==null?'':c.perM2bez]].forEach((v,i)=>{ const a=t.getCell(4+i,4), b=t.getCell(4+i,5);
+    a.value=v[0]; b.value=v[1]; [a,b].forEach(x=>{ x.font={bold:true,size:10,color:{argb:INK}}; x.fill=fill(SOFT); x.border=line; }); });
+  t.getCell(4,5).font={bold:true,size:14,color:{argb:INK}}; t.getCell(4,5).fill=fill(ACC); t.getCell(4,4).fill=fill(ACC); t.getCell(4,5).numFmt=EUR; t.getCell(5,5).numFmt=EUR; t.getCell(6,5).numFmt='0.0000 "€"';
+  const R=15; put(t,R,[['Nr.','Pozīcija (MK 408 — 1.1. Sanitārā apkope)','Mēnesī','Gadā','Daļa']]); head(t,R,5,[3,4,5]);
+  const L=(c.lines||[]); L.forEach((l,i)=>t.getRow(R+1+i).values=[l.nr||'',l.name,l.men,l.gada,l.dala==null?'':l.dala]);
+  if(L.length){ body(t,R+1,R+L.length,5); fmt(t,R+1,R+L.length,3,EUR); fmt(t,R+1,R+L.length,4,EUR); fmt(t,R+1,R+L.length,5,'0.0%'); L.forEach((l,i)=>{ t.getCell(R+1+i,1).font={size:10,color:{argb:MUTE}}; if(l.bold) tot(t,R+1+i,5,!!l.total); }); }
+  t.getColumn(1).width=16; t.getColumn(2).width=50; t.getColumn(3).width=18; t.getColumn(4).width=32; t.getColumn(5).width=18; end(t);
+  // Platības
+  const pl=sheet('Platības'); title(pl,'Platības',subT,3); put(pl,4,[['Zona','Tips','Platība, m²']]); head(pl,4,3,[3]);
+  const TP={iek:'Koplietošanas iekštelpas',cieti:'Teritorija — cietie segumi',gar:'Garāža / pazemes stāvvieta'};
+  const pr=(d.telpas||[]).map(z=>[z.nosaukums, TP[z.tips]||'Teritorija — zālāji / apstādījumi', Number(z.m2)||0]); const A=c.areas||{};
+  pr.push(['Koplietošanas iekštelpas kopā','',A.iek],['Teritorija kopā','',A.ter],['Logi (aprēķins)','',A.logi]); put(pl,5,pr); body(pl,5,4+pr.length,3); fmt(pl,5,4+pr.length,3,'#,##0.0#');
+  for(let i=pr.length-3;i<pr.length;i++) tot(pl,5+i,3); pl.getColumn(1).width=46; pl.getColumn(2).width=34; pl.getColumn(3).width=16; end(pl);
+  // Darbi
+  const w=sheet('Darbi'); title(w,'Regulārie darbi',subT,8); put(w,4,[['Darbs','Zona','Izpildītājs','Platība, m²','Reizes mēnesī','Ražība, m² / h','Stundas mēnesī','Izmaksas mēnesī']]); head(w,4,8,[4,5,6,7,8]);
+  const wr=(c.darbi||[]).map(x=>[x.nosaukums,x.zona,x.izp,x.area,x.reizes,x.raziba,x.h,x.cost]); wr.push(['Kopā','','','','','',(c.hA||0)+(c.hS||0),c.darbiCost]); put(w,5,wr); body(w,5,4+wr.length,8);
+  fmt(w,5,4+wr.length,4,'#,##0'); fmt(w,5,4+wr.length,5,'#,##0.00'); fmt(w,5,4+wr.length,6,'#,##0'); fmt(w,5,4+wr.length,7,'#,##0.0'); fmt(w,5,4+wr.length,8,EUR); tot(w,4+wr.length,8,true);
+  w.getColumn(1).width=60; [2,3].forEach(i=>w.getColumn(i).width=20); [4,5,6,7,8].forEach(i=>w.getColumn(i).width=15); end(w);
+  // Sezonālie darbi
+  const se=sheet('Sezonālie darbi'); title(se,'Sezonālie darbi',subT,6); put(se,4,[['Sezonālais darbs','Platība, m²','Cena reizē (€/m² vai €/gab.)','Reizes gadā','Summa gadā','Mēnesī']]); head(se,4,6,[2,3,4,5,6]);
+  const sr=(c.sezon||[]).map(x=>[x.nosaukums,x.area,x.cena,x.reizes,x.gada,x.men]); sr.push(['Kopā','','','',c.sezonGada,c.sezonMen]); put(se,5,sr); body(se,5,4+sr.length,6);
+  fmt(se,5,4+sr.length,2,'#,##0'); fmt(se,5,4+sr.length,3,'#,##0.000'); fmt(se,5,4+sr.length,4,'#,##0'); fmt(se,5,4+sr.length,5,EUR); fmt(se,5,4+sr.length,6,EUR); tot(se,4+sr.length,6,true);
+  se.getColumn(1).width=60; [2,3,4,5,6].forEach(i=>se.getColumn(i).width=17); end(se);
+  // Inventārs
+  const inv=sheet('Inventārs'); title(inv,'Inventārs',subT,4); put(inv,4,[['Grupa','Pozīcija','Apraksts','Cena']]); head(inv,4,4,[4]);
+  const ir=[]; [['Iekštelpu uzkopšanai',d.invIek],['Pagalma uzkopšanai',d.invPag]].forEach(g=>(g[1]||[]).filter(x=>x.on).forEach(x=>ir.push([g[0],x.nosaukums,x.apraksts||'',Number(x.cena)||0])));
+  ir.push(['Kopā','','',c.invTotal],['Nolietojums mēnesī (÷ '+P.invMen+' mēn.)','','',c.inv]); put(inv,5,ir); body(inv,5,4+ir.length,4); fmt(inv,5,4+ir.length,4,EUR);
+  tot(inv,3+ir.length,4,true); tot(inv,4+ir.length,4,true); inv.getColumn(1).width=28; inv.getColumn(2).width=34; inv.getColumn(3).width=48; inv.getColumn(4).width=16; end(inv);
+  // Parametri
+  const pa=sheet('Parametri'); title(pa,'Parametri',subT,2); put(pa,4,[['Parametrs','Vērtība']]); head(pa,4,2,[2]);
+  const prm=[['Apkopējas bruto likme, € / h',P.likmeA],['Sētnieka bruto likme, € / h',P.likmeS],['Minimālā alga, € / mēn.',P.minAlga],['Darba stundas mēnesī',P.stundas],['Atvaļinājuma rezerve',P.atv],['Darba devēja VSAOI',P.vsaoi],
+    ['Pilnā stundas cena — apkopēja',c.fullA],['Pilnā stundas cena — sētnieks',c.fullS],['Neproduktīvais laiks',P.neprod],['Logu daļa no iekštelpām',P.logiDala],['Atkritumu konteineru laukums, m²',P.atkritumi],
+    ['Materiāli — iekštelpas, € / m² mēn.',P.matIek],['Materiāli — teritorija, € / m² mēn.',P.matTer],['Inventāra nolietojums, mēn.',P.invMen],['Transports un sakari, € / mēn.',P.transports],
+    ['Netiešās izmaksas',P.netiesas],['Neparedzētie izdevumi',P.nepar],['Peļņa',P.pelna],['PVN',P.pvn]];
+  put(pa,5,prm); body(pa,5,4+prm.length,2); [5,6,9,10,16,17,18,19].forEach(i=>pa.getCell(4+i,2).numFmt='0.00%'); pa.getColumn(1).width=44; pa.getColumn(2).width=18; end(pa);
+  return bufB64(await wb.xlsx.writeBuffer());
+}
+/* Vadībai — visu (atfiltrēto) budžetu saraksts */
+async function xlsxList(list){
+  await loadExcel();
+  const INK='FF17201C', LINE='FFDFE5E2', ACC='FFE2DDF2', SOFT='FFF3F5F4', EUR='#,##0.00 "€"';
+  const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Budžeti',{views:[{state:'frozen',ySplit:4,showGridLines:false}]});
+  const head=['ID','Objekts','Adrese','Pasūtītājs','Izpildītājs','Autors','Statuss','Sagatavots','Sērija','Dzīvokļu m²','Cena mēnesī bez PVN','Cena mēnesī ar PVN','Cena gadā bez PVN','€ / m² mēn. bez PVN','Versija','Atjaunots','Vadības komentārs'];
+  ws.mergeCells(1,1,1,head.length); ws.getCell(1,1).value='Budžetu saraksts'; ws.getCell(1,1).font={size:16,bold:true}; for(let i=1;i<=head.length;i++) ws.getCell(1,i).fill={type:'pattern',pattern:'solid',fgColor:{argb:ACC}}; ws.getRow(1).height=34;
+  ws.getCell(2,1).value=new Date().toLocaleDateString('lv-LV')+' · '+list.length+' budžeti';
+  ws.getRow(4).values=head; ws.getRow(4).eachCell(c=>{ c.font={bold:true,size:10,color:{argb:'FFFFFFFF'}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:INK}}; });
+  list.forEach(m=>ws.addRow([m.id,m.nosaukums,m.adrese,m.pasutitajs,m.izpilditajs,m.autors,m.statuss,m.sagatavots,m.serija?SER.name(m.serija):'—',m.plat||'',m.bezPVN,m.arPVN,Math.round(m.bezPVN*12*100)/100,m.perM2||'',m.versija,String(m.atjaunots||'').replace('T',' '),m.komentars||'']));
+  const n=list.length, t=5+n;
+  for(let r=5;r<t;r++){ ws.getRow(r).eachCell({includeEmpty:true},c=>{ c.font={size:10}; c.border={bottom:{style:'thin',color:{argb:LINE}}}; }); ws.getCell(r,10).numFmt='#,##0.0#'; [11,12,13].forEach(i=>ws.getCell(r,i).numFmt=EUR); ws.getCell(r,14).numFmt='0.0000 "€"'; }
+  if(n){ ws.getCell(t,10).value='Kopā'; [11,12,13].forEach(i=>{ const col=String.fromCharCode(64+i); ws.getCell(t,i).value={formula:'SUM('+col+'5:'+col+(t-1)+')'}; ws.getCell(t,i).numFmt=EUR; });
+    for(let i=1;i<=head.length;i++){ const c=ws.getCell(t,i); c.font={bold:true,size:10}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ACC}}; } ws.autoFilter={from:{row:4,column:1},to:{row:4+n,column:head.length}}; }
+  head.forEach((h,i)=>ws.getColumn(i+1).width=Math.max(12,Math.min(40,h.length+4))); ws.getColumn(2).width=30; ws.getColumn(3).width=34;
+  ws.getCell(t+2,1).value='SELECTUM HOME · vaitkevix.cloud/sh · © '+new Date().getFullYear()+' VAITKEVIX, SIA. Visas tiesības aizsargātas.';
+  return bufB64(await wb.xlsx.writeBuffer());
 }
 function download(f){
   const bin=atob(f.b64), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
