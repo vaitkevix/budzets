@@ -68,6 +68,7 @@
   const isApt = (r) => / - \d+[A-Za-z]?\b/.test(r.row);
   const addrOf = (row) => { const m = row.match(/\d{11,17}\s*[0-9/]*\s*(.+?, [^,]+?)(, LV-\d{4})?(\s|$)/); return m ? m[1].trim() : ''; };
 
+  const tnames = (R) => [...new Set((R || []).map(r => (r.n || r.v || '').trim()).concat((R || []).map(r => (r.v || '').trim())).filter(Boolean))].slice(0, 15);   // telpu nosaukumi/veidi grupā (stāvvietas atpazīšanai)
   async function readBuilding(b, groups, zeme, onProg) {
     const bt = txt(await get(b.h));
     const mine = groups.filter(g => g.t.indexOf(b.t) === 0);
@@ -78,25 +79,28 @@
       kopl_iek: field(bt, 'Koplietošanas iekštelpu platība (kv.m.)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība (kv.m.)'),
       stavi: field(bt, 'Virszemes stāvu skaits'), gads: field(bt, 'Ekspluatācijas uzsākšanas gads') || field(bt, 'Būvniecības pabeigšanas gads') || field(bt, 'Uzbūvēšanas gads'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums (kv.m.)'),
       dzivokli: apts.length, telpas: [], citas_grupas: [], neizdevas: [] };
-    /* Telpu grupas ar numuru adresē (« - 12») — pārbauda lietošanas veidu: stāvvietas, garāžas, noliktavas, veikali nav dzīvokļi */
-    const notApt = []; let ad = 0;
-    const chk = async (g) => { const t = txt(await get(g.h)), lv = fieldS(t, 'Lietošanas veids'), nos = fieldS(t, 'Nosaukums');
-      if (lv && !/dzīvok|^\s*11\d\d/i.test(lv) && !/dzīvok/i.test(nos)) notApt.push({ apz: g.t, nosaukums: nos, lv, m2: field(t, 'Kopējā platība (kv.m.)') });
-      ad++; onProg(ad, apts.length, 'dz'); };
-    for (let i = 0; i < apts.length; i += 4) await Promise.all(apts.slice(i, i + 4).map(g => chk(g).catch(() => { ad++; out.neizdevas.push(g.t); })));
-    out.dzivokli = apts.length - notApt.length;
-    const grupas = []; let done = 0;
-    const one = async (g) => {
-      const d = await get(g.h); const t = txt(d);
-      const grp = { apz: g.t, nosaukums: fieldS(t, 'Nosaukums'), lv: fieldS(t, 'Lietošanas veids'), m2: field(t, 'Kopējā platība (kv.m.)'), telpas: [] };
+    const rooms = (d) => { const out = [];
       const tbl = [...d.querySelectorAll('table')].filter(tb => !tb.querySelector('table') && /Telpas veids/.test(tb.textContent)).pop();
       if (tbl) {
         const head = [...tbl.querySelectorAll('tr')].find(tr => /Telpas veids/.test(tr.textContent));
         const hc = [...head.children].map(c => c.textContent.trim());
         const iN = hc.findIndex(h => /^Nosaukums/.test(h)), iV = hc.findIndex(h => /Telpas veids/.test(h)), iS = hc.findIndex(h => /^Stāvs/.test(h)), iP = hc.findIndex(h => /^Platība/.test(h));
         [...tbl.querySelectorAll('tr')].filter(tr => tr !== head).forEach(tr => { const c = [...tr.children].map(x => x.textContent.trim()); if (c.length < 5 || !c[iN]) return;
-          grp.telpas.push({ n: c[iN] || '', v: c[iV] || '', s: c[iS] || '', m2: num(c[iP]) || 0 }); });
+          out.push({ n: c[iN] || '', v: c[iV] || '', s: c[iS] || '', m2: num(c[iP]) || 0 }); });
       }
+      return out;
+    };
+    /* Telpu grupas ar numuru adresē (« - 12») — pārbauda lietošanas veidu: stāvvietas, garāžas, noliktavas, veikali nav dzīvokļi */
+    const notApt = []; let ad = 0;
+    const chk = async (g) => { const d = await get(g.h), t = txt(d), lv = fieldS(t, 'Lietošanas veids'), nos = fieldS(t, 'Nosaukums');
+      if (lv && !/dzīvok|^\s*11\d\d/i.test(lv) && !/dzīvok/i.test(nos)) notApt.push({ apz: g.t, nosaukums: nos, lv, m2: field(t, 'Kopējā platība (kv.m.)'), telpas_n: tnames(rooms(d)) });
+      ad++; onProg(ad, apts.length, 'dz'); };
+    for (let i = 0; i < apts.length; i += 4) await Promise.all(apts.slice(i, i + 4).map(g => chk(g).catch(() => { ad++; out.neizdevas.push(g.t); })));
+    out.dzivokli = apts.length - notApt.length;
+    const grupas = []; let done = 0;
+    const one = async (g) => {
+      const d = await get(g.h); const t = txt(d);
+      const grp = { apz: g.t, nosaukums: fieldS(t, 'Nosaukums'), lv: fieldS(t, 'Lietošanas veids'), m2: field(t, 'Kopējā platība (kv.m.)'), telpas: rooms(d) };
       grupas.push(grp); done++; onProg(done, other.length);
     };
     for (let i = 0; i < other.length; i += 3) await Promise.all(other.slice(i, i + 3).map(g => one(g).catch(() => out.neizdevas.push(g.t))));
@@ -110,7 +114,7 @@
     }));
     out.telpas_st = Object.values(aggS).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
     out.telpas = Object.values(agg).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
-    out.citas_grupas = grupas.filter(g => !/^1200\b|koplietošanas/i.test(g.lv)).map(g => ({ apz: g.apz, nosaukums: g.nosaukums, lv: g.lv, m2: g.m2 })).concat(notApt);
+    out.citas_grupas = grupas.filter(g => !/^1200\b|koplietošanas/i.test(g.lv)).map(g => ({ apz: g.apz, nosaukums: g.nosaukums, lv: g.lv, m2: g.m2, telpas_n: tnames(g.telpas) })).concat(notApt);
     return out;
   }
 
