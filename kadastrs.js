@@ -93,11 +93,15 @@
       grupas.push(grp); done++; onProg(done, other.length);
     };
     for (let i = 0; i < other.length; i += 3) await Promise.all(other.slice(i, i + 3).map(g => one(g).catch(() => out.neizdevas.push(g.t))));
-    const agg = {};
+    const agg = {}, aggS = {};   // aggS — tas pats pa zonām (virszeme / pagrabs / bēniņi) Mājas lietai; Budžets lieto agg
+    const zona = (s) => /pagrab|pazem|cokol|^\s*-\s*\d/i.test(s) ? 'Pagrabs' : /bēniņ|mansard|jumt/i.test(s) ? 'Bēniņi / jumts' : 'Virszeme';
     grupas.filter(g => /^1200\b|koplietošanas/i.test(g.lv)).forEach(g => g.telpas.forEach(r => {
       const ar = /ārtelp/i.test(r.v); const k = (r.n || 'Telpa').trim() + (ar ? ' (ārtelpa)' : '');
       (agg[k] = agg[k] || { nosaukums: k, m2: 0, skaits: 0, ar }); agg[k].m2 += r.m2; agg[k].skaits++;
+      const z = zona(r.s), ks = z + '|' + k.toLowerCase();
+      (aggS[ks] = aggS[ks] || { zona: z, nosaukums: k, m2: 0, skaits: 0, ar }); aggS[ks].m2 += r.m2; aggS[ks].skaits++;
     }));
+    out.telpas_st = Object.values(aggS).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
     out.telpas = Object.values(agg).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
     out.citas_grupas = grupas.filter(g => !/^1200\b|koplietošanas/i.test(g.lv)).map(g => ({ apz: g.apz, nosaukums: g.nosaukums, lv: g.lv, m2: g.m2 }));
     return out;
