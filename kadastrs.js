@@ -38,7 +38,7 @@
     '.pick input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--dark);flex:none}' +
     '.pick small{display:block;font-size:13px;color:var(--ink3)}' +
     '.foot{display:block;padding:10px 6px 2px;text-align:center;font-size:11px;color:var(--ink3)}' +
-    '</style><div class="w"><div class="hero"><span class="kick">SH | Budžets</span><span class="h">Kadastrs → budžets</span>' +
+    '</style><div class="w"><div class="hero"><span class="kick">SH | Kadastrs</span><span class="h">Kadastrs → SH</span>' +
     '<button class="x" id="shk_x" title="Aizvērt" aria-label="Aizvērt">×</button><span class="bar"><i id="shk_p"></i></span></div>' +
     '<div class="card" id="shk_s">Sāku…</div><span class="foot">© ' + new Date().getFullYear() + ' VAITKEVIX, SIA</span></div>';
   document.body.appendChild(host);
@@ -138,7 +138,7 @@
       const payload = res.length === 1 ? res[0] : res;
       const json = JSON.stringify(payload);
       const enc = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      const url = APP + 'kadastrs=' + enc;
+      const url = APP + 'kadastrs=' + enc, urlMl = 'https://vaitkevix.cloud/sh/#ml/kadastrs=' + enc;
       const dz = res.reduce((s, k) => s + k.dzivokli, 0), m2 = res.reduce((s, k) => s + k.telpas.reduce((a, x) => a + x.m2, 0), 0);
       const zm = res[0] && res[0].zeme_m2, adr = res.map(k => k.adrese || k.buve).filter(Boolean).join('; ');
       st('<b>Gatavs ✓</b>' + (adr ? '<span class="mut">' + esc(adr) + '</span>' : '') +
@@ -146,9 +146,10 @@
         '<div class="st"><b>' + dz + '</b><span>dzīvokļi</span></div>' +
         '<div class="st"><b>' + nf(m2) + '</b><span>koplietošanas m²</span></div>' +
         '<div class="st"><b>' + nf(zm) + '</b><span>zeme m²</span></div></div>' +
-        '<span class="mut">Budžetā izvēlies: jauns budžets vai pievienot esošam (dalītai mājai — katru daļu pēc kārtas).</span>' +
+        '<span class="mut">Budžetā izvēlies: jauns budžets vai pievienot esošam (dalītai mājai — katru daļu pēc kārtas). Mājas lietā — saglabā objekta kadastra datus.</span>' +
         '<div class="row"><a class="btn p" href="' + url + '" target="_blank" rel="noopener">Atvērt Budžetā</a>' +
-        '<button class="btn s" id="shk_c">Kopēt</button></div>', 100);
+        '<button class="btn s" id="shk_c">Kopēt</button></div>' +
+        '<a class="btn p full" href="' + urlMl + '" target="_blank" rel="noopener">Atvērt Mājas lietā</a>', 100);
       box.querySelector('#shk_c').onclick = () => { navigator.clipboard.writeText('SHBUDZETS ' + json).then(() => box.querySelector('#shk_c').textContent = 'Nokopēts ✓'); };
       window.__shKadData = payload; window.__shKad = 0;
     } catch (e) { fail('Kļūda: ' + e.message); }
