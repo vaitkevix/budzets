@@ -78,6 +78,13 @@
       kopl_iek: field(bt, 'Koplietošanas iekštelpu platība (kv.m.)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība (kv.m.)'),
       stavi: field(bt, 'Virszemes stāvu skaits'), gads: field(bt, 'Ekspluatācijas uzsākšanas gads') || field(bt, 'Būvniecības pabeigšanas gads') || field(bt, 'Uzbūvēšanas gads'), pazemes: field(bt, 'Pazemes stāvu skaits'), apbuve: field(bt, 'Apbūves laukums (kv.m.)'),
       dzivokli: apts.length, telpas: [], citas_grupas: [], neizdevas: [] };
+    /* Telpu grupas ar numuru adresē (« - 12») — pārbauda lietošanas veidu: stāvvietas, garāžas, noliktavas, veikali nav dzīvokļi */
+    const notApt = []; let ad = 0;
+    const chk = async (g) => { const t = txt(await get(g.h)), lv = fieldS(t, 'Lietošanas veids'), nos = fieldS(t, 'Nosaukums');
+      if (lv && !/dzīvok|^\s*11\d\d/i.test(lv) && !/dzīvok/i.test(nos)) notApt.push({ apz: g.t, nosaukums: nos, lv, m2: field(t, 'Kopējā platība (kv.m.)') });
+      ad++; onProg(ad, apts.length, 'dz'); };
+    for (let i = 0; i < apts.length; i += 4) await Promise.all(apts.slice(i, i + 4).map(g => chk(g).catch(() => { ad++; out.neizdevas.push(g.t); })));
+    out.dzivokli = apts.length - notApt.length;
     const grupas = []; let done = 0;
     const one = async (g) => {
       const d = await get(g.h); const t = txt(d);
@@ -103,7 +110,7 @@
     }));
     out.telpas_st = Object.values(aggS).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
     out.telpas = Object.values(agg).map(x => Object.assign(x, { m2: Math.round(x.m2 * 10) / 10 })).sort((a, b) => b.m2 - a.m2);
-    out.citas_grupas = grupas.filter(g => !/^1200\b|koplietošanas/i.test(g.lv)).map(g => ({ apz: g.apz, nosaukums: g.nosaukums, lv: g.lv, m2: g.m2 }));
+    out.citas_grupas = grupas.filter(g => !/^1200\b|koplietošanas/i.test(g.lv)).map(g => ({ apz: g.apz, nosaukums: g.nosaukums, lv: g.lv, m2: g.m2 })).concat(notApt);
     return out;
   }
 
@@ -137,7 +144,7 @@
       for (let i = 0; i < chosen.length; i++) {
         const b = chosen[i], base = 10 + i / chosen.length * 88, span = 88 / chosen.length;
         st('Lasu būvi ' + (i + 1) + ' / ' + chosen.length + '…', base);
-        res.push(await readBuilding(b, groups, zeme, (d, n) => st('Būve ' + (i + 1) + ' / ' + chosen.length + ' · telpu grupas: ' + d + ' / ' + n, base + d / Math.max(1, n) * span)));
+        res.push(await readBuilding(b, groups, zeme, (d, n, k) => st('Būve ' + (i + 1) + ' / ' + chosen.length + ' · ' + (k === 'dz' ? 'pārbaudu dzīvokļus' : 'telpu grupas') + ': ' + d + ' / ' + n, base + (k === 'dz' ? d / Math.max(1, n) * span * 0.6 : span * 0.6 + d / Math.max(1, n) * span * 0.4))));
       }
       const payload = res.length === 1 ? res[0] : res;
       const json = JSON.stringify(payload);
