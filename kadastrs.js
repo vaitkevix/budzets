@@ -77,7 +77,7 @@
     const bt = txt(await get(b.h));
     const mine = groups.filter(g => g.t.indexOf(b.t) === 0);
     const apts = mine.filter(isApt), other = mine.filter(r => !isApt(r));
-    const out = { v: 1, avots: 'kadastrs.lv', buve: b.t, zeme_apz: zeme.apz || '', zeme_m2: zeme.m2,
+    const out = { v: 1, avots: 'kadastrs.lv', buve: b.t, zeme_apz: zeme.apz || '', zeme_m2: zeme.m2, zeme_dalas: zeme.dalas.length > 1 ? zeme.dalas : undefined,
       adrese: addrOf(b.row), nosaukums_buvei: fieldS(bt, 'Nosaukums'), tips: fieldS(bt, 'Būves tips'),
       kopeja: field(bt, 'Kopējā platība (kv.m.)'), dzivoklu_m2: field(bt, 'Dzīvokļu platība (kv.m.)'),
       kopl_iek: field(bt, 'Koplietošanas iekštelpu platība (kv.m.)'), kopl_ar: field(bt, 'Koplietošanas ārtelpu platība (kv.m.)'),
@@ -135,7 +135,7 @@
       }
       const seen = {};
       const rows = [...doc.querySelectorAll('tr')].filter(tr => !tr.querySelector('tr')).map(tr => { const a = tr.querySelector('a'); const t = a && a.textContent.trim(); return a && /^\d{11}(\d{3}(\d{3})?)?$/.test(t) ? { t, h: a.href, row: tr.textContent.replace(/\s+/g, ' ') } : null; }).filter(r => r && !seen[r.t] && (seen[r.t] = 1));
-      const parcel = rows.find(r => r.t.length === 11), blds = rows.filter(r => r.t.length === 14), groups = rows.filter(r => r.t.length === 17);
+      const blds = rows.filter(r => r.t.length === 14), groups = rows.filter(r => r.t.length === 17);
       if (!blds.length) return fail('Neatradu būvi šajā lapā.');
       let chosen = blds;
       if (blds.length > 1) {
@@ -148,8 +148,15 @@
         chosen = [...box.querySelectorAll('input[data-i]')].filter(c => c.checked).map(c => blds[+c.dataset.i]);
         if (!chosen.length) return fail('Nav izvēlēta neviena būve.');
       }
-      const zeme = { apz: parcel ? parcel.t : '', m2: null };
-      if (parcel) { st('Lasu zemes vienību…', 8); const pt = txt(await get(parcel.h)); const ha = field(pt, 'Nekustamā īpašuma objekta platība'); zeme.m2 = ha != null ? Math.round(ha * 10000) : null; }
+      /* Māja var stāvēt uz vairākām zemes vienībām (piem. Ikšķiles 13) → nolasa visas un saskaita platības */
+      const parcels = rows.filter(r => r.t.length === 11), dalas = [];
+      for (let i = 0; i < parcels.length; i++) {
+        st('Lasu zemes vienību ' + (i + 1) + ' / ' + parcels.length + '…', 8);
+        const ha = field(txt(await get(parcels[i].h)), 'Nekustamā īpašuma objekta platība');
+        dalas.push({ apz: parcels[i].t, m2: ha != null ? Math.round(ha * 10000) : null });
+      }
+      const known = dalas.filter(d => d.m2 != null);
+      const zeme = { apz: dalas.map(d => d.apz).join(', '), m2: known.length ? known.reduce((s, d) => s + d.m2, 0) : null, dalas };
       const res = [];
       for (let i = 0; i < chosen.length; i++) {
         const b = chosen[i], base = 10 + i / chosen.length * 88, span = 88 / chosen.length;
@@ -167,6 +174,7 @@
         '<div class="st"><b>' + dz + '</b><span>dzīvokļi</span></div>' +
         '<div class="st"><b>' + nf(m2) + '</b><span>koplietošanas m²</span></div>' +
         '<div class="st"><b>' + nf(zm) + '</b><span>zeme m²</span></div></div>' +
+        (zeme.dalas.length > 1 ? '<span class="mut">Zeme: ' + zeme.dalas.length + ' zemes vienības — ' + zeme.dalas.map(d => esc(d.apz) + ' (' + nf(d.m2) + ' m²)').join(' + ') + '</span>' : '') +
         '<span class="mut">Budžetā izvēlies: jauns budžets vai pievienot esošam (dalītai mājai — katru daļu pēc kārtas). Mājas lietā — saglabā objekta kadastra datus.</span>' +
         '<div class="row"><a class="btn p" href="' + url + '" target="_blank" rel="noopener">Atvērt Budžetā</a>' +
         '<button class="btn s" id="shk_c">Kopēt</button></div>' +
