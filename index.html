@@ -884,8 +884,8 @@ const IC = {
 async function api(action, data = {}) {
   if (self.DEMO_API) return self.DEMO_API(action, Object.assign({ pin: S.pin }, data));
   if (!CFG.API_URL) throw new Error('config.js nav ievadīts API_URL');
-  const r = await fetch(CFG.API_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, pin: S.pin }, data)) });
-  const j = await r.json();
+  const r = await fetch(CFG.API_URL, { signal: self.AbortSignal && AbortSignal.timeout ? AbortSignal.timeout(90000) : undefined, method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, pin: S.pin }, data)) }).catch(() => { throw new Error('Nav savienojuma ar serveri — mēģiniet vēlreiz'); });
+  const j = await r.json().catch(() => ({ ok: false, error: 'Serveris neatbild — mēģiniet vēlreiz' }));
   if (j.notices) { let seen = {}; try { seen = JSON.parse(localStorage.getItem('budz_seen') || '{}'); } catch (e) {}
     j.notices.forEach(n => { if (!seen[n.id]) { seen[n.id] = 1; setTimeout(() => toast(n.text, 'err'), 600); } }); try { localStorage.setItem('budz_seen', JSON.stringify(seen)); } catch (e) {} }
   if (!j.ok) throw new Error(j.error || 'Kļūda');
