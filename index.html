@@ -915,7 +915,7 @@ async function tryLogin(pin, silent){
   if(!pin) return;
   S.pin=pin; const b=$('loginBtn'); busyBtn(b,true);
   try{
-    const r=await api('login'); S.user=r.user; S.settings=r.settings||{}; setObjList(r.objekti); ls.set('budzets_pin',pin); ls.set('budzets_user',JSON.stringify(r.user)); ls.set('budzets_set',JSON.stringify(S.settings)); startApp();
+    const r=await api('login'); S.user=r.user; S.settings=r.settings||{}; setObjList(r.objekti, r.objektiKad); ls.set('budzets_pin',pin); ls.set('budzets_user',JSON.stringify(r.user)); ls.set('budzets_set',JSON.stringify(S.settings)); startApp();
   }catch(err){
     ls.del('budzets_user');
     ls.del('budzets_pin'); S.pin=''; showLogin();
@@ -1351,8 +1351,24 @@ const inp=(p,o={})=>{ const v=getP(p); const t=o.t||'';
   const val = t==='n'? nfmt(v) : t==='pct'? nfmt(r2((+v||0)*10000)/100) : (v==null?'':v);
   return `<input class="input ${t?'num':''}" data-p="${p}" ${t?`data-t="${t}" inputmode="decimal"`:''} ${o.type?`type="${o.type}"`:''} value="${esc(val)}" placeholder="${esc(o.ph||'')}" oninput="onIn(this)" ${o.ch?`onchange="onIn(this,true)"`:''} ${o.list?`list="${o.list}" autocomplete="off"`:''}>`; };
 /* Adrešu ieteikumi no Mājas lietas (objekti); var rakstīt arī jaunu adresi (potenciāls klients) */
-function setObjList(L){ if(!Array.isArray(L)) return; let d=document.getElementById('objList'); if(!d){ d=document.createElement('datalist'); d.id='objList'; document.body.appendChild(d); }
-  d.innerHTML=L.map(a=>`<option value="${esc(a)}"></option>`).join(''); }
+function setObjList(L, K){ if(!Array.isArray(L)) return; let d=document.getElementById('objList'); if(!d){ d=document.createElement('datalist'); d.id='objList'; document.body.appendChild(d); }
+  d.innerHTML=L.map(a=>`<option value="${esc(a)}"></option>`).join('');
+  S.objKad=Array.isArray(K)?K:[]; let k=document.getElementById('objKadList'); if(!k){ k=document.createElement('datalist'); k.id='objKadList'; document.body.appendChild(k); }
+  k.innerHTML=S.objKad.map(a=>`<option value="${esc(a)}"></option>`).join(''); }
+/* Budžets no Mājas lietas objekta: tā kadastra dati (dzīvokļi, m², telpas, zeme) → tas pats ceļš kā «SH Kadastrs» */
+function mlPick(){
+  if(!isMaker()) return toast('Budžetu var gatavot tikai budžeta gatavotājs','err');
+  openSheet(`<h3>No Mājas lietas</h3><p class="lead">Izvēlieties objektu — ieliksim tā kadastra datus (dzīvokļi, m², telpas, zeme). ${S.objKad&&S.objKad.length?'Objekti ar kadastra datiem: '+S.objKad.length+'.':''}</p>
+    ${fld('Objekts','<input class="input" id="mlAdr" list="objKadList" autocomplete="off" placeholder="Sāciet rakstīt adresi…">')}
+    <div class="btn-row"><button class="btn btn-glass" onclick="closeSheet()">Atcelt</button><button class="btn btn-primary" id="mlGo">Ielikt datus</button></div>`, true);
+  setTimeout(()=>{ const i=$('mlAdr'); if(i) i.focus(); },50);
+  $('mlGo').onclick=()=>{ const a=$('mlAdr').value.trim(); if(!a) return toast('Izvēlieties objektu','err'); closeSheet(); mlLoad(a); };
+}
+async function mlLoad(adrese){
+  adrese=String(adrese||'').trim(); if(!adrese) return toast('Vispirms ierakstiet adresi','err');
+  toast('Ielādēju Mājas lietas datus…');
+  try{ const r=await api('mlKad',{adrese}); kadStart(r.kad); }catch(err){ toast(netMsg(err),'err'); }
+}
 const fld=(label,html,hint)=>`<div class="field"><span class="label">${label}</span>${html}${hint?`<div class="hint">${hint}</div>`:''}</div>`;
 const sw=(p,on)=>`<label class="sw"><input type="checkbox" data-p="${p}" ${on?'checked':''} onchange="onIn(this,true)"><i></i></label>`;
 function srcOptions(sel, manualLabel){
@@ -1393,7 +1409,7 @@ const PANES={
   objekts(){ const o='objekts.';
     return vh('Objekts','Pamatdati tāmes galvenei.')+`<div class="card panel">${S.ro?'':aiBtn()}
       ${fld('Nosaukums',inp(o+'nosaukums',{ph:'piem. Hipokrāta 24A (53 dzīvokļi)'}))}
-      ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga',list:'objList'}),'Izvēlieties no objektiem vai ierakstiet jaunu adresi')}
+      ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga',list:'objList'}),'Izvēlieties no objektiem vai ierakstiet jaunu adresi · <a href="#" onclick="mlLoad(S.d.objekts.adrese);return false">Ielikt datus no Mājas lietas</a>')}
       <div class="g2">${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas'}))}${fld('Izpildītājs',inp(o+'izpilditajs'))}</div><div class="gap"></div>
       <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}),'bez balkoniem; no tās rēķina € / m²')}</div><div class="gap"></div>
       ${serField()}<div class="gap"></div>
@@ -1651,9 +1667,10 @@ function mailSheet(){
 async function tplLoad(){ try{ const r=await api('tplList'); S.tpl=r.items||[]; ls.set('budzets_tpl',JSON.stringify(S.tpl)); }catch(e){ try{ S.tpl=JSON.parse(ls.get('budzets_tpl')||'[]'); }catch(_){ S.tpl=[]; } } }
 function newFlow(){
   if(S.view==='edit' && S.dirty) return confirmSheet('Nesaglabātas izmaiņas','Sākt jaunu budžetu bez saglabāšanas?','Sākt jaunu',()=>{ S.dirty=false; draft.clear(); S.view=''; newFlow(); },true);
-  const T=S.tpl||[]; if(!T.length) return newBudget();
-  openSheet(`<h3>Jauns budžets</h3><p class="lead">Sāciet no tukša budžeta vai no veidnes (mājas tips).</p>
+  const T=S.tpl||[], ML=(S.objKad||[]).length; if(!T.length && !ML) return newBudget();
+  openSheet(`<h3>Jauns budžets</h3><p class="lead">Sāciet no tukša budžeta, no Mājas lietas objekta vai no veidnes (mājas tips).</p>
     <div class="menu"><button onclick="closeSheet();newBudget()">${IC.plus.replace('<svg','<svg class="i"')} Tukšs budžets<span>›</span></button>
+    ${ML?`<button onclick="closeSheet();mlPick()">${IC.copy} No Mājas lietas objekta<span>›</span></button>`:''}
     ${T.map(t=>`<button onclick="tplUse('${esc(t.id)}')">${IC.tpl} <span style="margin:0;color:var(--ink);flex:1;text-align:left">${esc(t.nosaukums)}${t.apraksts?`<small style="display:block;color:var(--ink-3);font-weight:600">${esc(t.apraksts)}</small>`:''}</span><span>${esc(t.autors||'')}</span></button>`).join('')}</div>
     <div class="gap"></div><button class="btn btn-glass btn-block" onclick="tplManage()">Pārvaldīt veidnes</button>`);
 }
@@ -1865,7 +1882,7 @@ async function fastStart(pin){
   let u=null; try{ u=JSON.parse(ls.get('budzets_user')||'null'); }catch(e){}
   if(!u) return tryLogin(pin,true);
   S.pin=pin; S.user=u; try{ S.settings=JSON.parse(ls.get('budzets_set')||'{}'); }catch(e){ S.settings={}; } startApp();
-  try{ const r=await api('login'); S.user=r.user; S.settings=r.settings||{}; setObjList(r.objekti); ls.set('budzets_user',JSON.stringify(r.user)); ls.set('budzets_set',JSON.stringify(S.settings));
+  try{ const r=await api('login'); S.user=r.user; S.settings=r.settings||{}; setObjList(r.objekti, r.objektiKad); ls.set('budzets_user',JSON.stringify(r.user)); ls.set('budzets_set',JSON.stringify(S.settings));
     if(r.user.role!==u.role||r.user.name!==u.name){ $('brandSub').textContent=S.user.name+' · '+roleLabel(S.user.role); } }
   catch(err){ if(/PIN/i.test(err.message)){ toast('PIN vairs nav derīgs — ienāciet vēlreiz','err'); logout(); } }
 }
