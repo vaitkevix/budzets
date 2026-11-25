@@ -1775,15 +1775,39 @@ async function pdfFile(co, meta){
   if(!r.file||!r.file.html) return r.file;
   return { name:r.file.name, mime:'application/pdf', b64: await htmlPdf(r.file.html) };
 }
+/** Lapu dalīšana pašiem (html2pdf «avoid» tabulās ieliek tukšas rindas un pārgriež rindas): A4 satura augstums
+ *  = floor(1436 × 275/190)/2 px (kā html2pdf griež lapas). Rinda/bloks, kas nesatilpst lapā, tiek pārcelts uz nākamo; .pb sāk jaunu lapu; virsraksts paliek ar tabulas pirmo rindu. */
+function pdfPaginate(doc, body){
+  const H=Math.floor(1436*275/190)/2, top=el=>el.getBoundingClientRect().top-body.getBoundingClientRect().top;
+  const bot=el=>el.getBoundingClientRect().bottom-body.getBoundingClientRect().top;
+  const spacer=(el,h)=>{ if(h<=0) return; let s;
+    if(el.tagName==='TR'){ s=doc.createElement('tr'); const td=doc.createElement('td'); td.colSpan=50; td.style.cssText='height:'+h+'px;padding:0;border:0;background:transparent'; s.appendChild(td); }
+    else { s=doc.createElement('div'); s.style.cssText='height:'+h+'px'; }
+    el.parentNode.insertBefore(s,el); };
+  const items=[...new Set([...body.querySelectorAll('.pb, .hd, .band, .card, h2, .t tr, .note, .ft')].map(el=>el.classList.contains('card')?el.closest('table'):el))].filter(el=>el&&!el.closest('.logo'));
+  for(const el of items){
+    const t=top(el); if(el.classList.contains('pb')){ el.classList.remove('pb'); el.style.pageBreakBefore='auto'; const r=t%H; if(r>1) spacer(el,H-r); continue; }
+    let end=bot(el);
+    if(el.tagName==='H2'){ let n=el.nextElementSibling; const r=n&&n.querySelector&&(n.matches('table')?n:n.querySelector('table')); const f=r&&r.querySelectorAll('tr')[1]; if(f) end=bot(f); }
+    if(end-t>=H) continue;
+    if(Math.floor(t/H)!==Math.floor((end-1)/H)) spacer(el, Math.ceil(t/H)*H-t);
+  }
+}
 async function htmlPdf(html){
-  const f=document.createElement('iframe'); f.style.cssText='position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0';
+  const f=document.createElement('iframe'); f.style.cssText='position:fixed;left:-10000px;top:0;width:718px;height:1123px;border:0';
   document.body.appendChild(f);
   try{
     await new Promise(res=>{ f.onload=res; f.srcdoc=html; });
-    const doc=f.contentDocument, win=f.contentWindow; await (doc.fonts&&doc.fonts.ready);
+    const doc=f.contentDocument, win=f.contentWindow;
+    // iPhone/iPad Safari pats palielina tekstu (text autosizing) → html2canvas zīmē vārdus ar spraugām un saturs iziet aiz malas.
+    // Fiksēts A4 satura platums (190 mm ≈ 718 px), bez palielināšanas un bez burtu atstarpēm.
+    const st=doc.createElement('style'); st.textContent='html{-webkit-text-size-adjust:100%!important;text-size-adjust:100%!important}html,body{width:718px!important;max-width:718px!important;margin:0!important;overflow:hidden}*{letter-spacing:0!important;word-spacing:normal!important}';
+    doc.head.appendChild(st); await (doc.fonts&&doc.fonts.ready);
     // bibliotēku ielādē pašā tāmes lapā, lai zīmējums paturētu tās stilu
     await new Promise((res,rej)=>{ const sc=doc.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; sc.onload=res; sc.onerror=()=>rej(new Error('Neizdevās ielādēt PDF bibliotēku')); doc.head.appendChild(sc); });
-    const opt=win.JSON.parse(JSON.stringify({ margin:[10,10,12,10], image:{type:'jpeg',quality:0.92}, html2canvas:{scale:2,useCORS:true,windowWidth:794}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy']} }));   // iframe masīvi
+    const opt=win.JSON.parse(JSON.stringify({ margin:[10,10,12,10], image:{type:'jpeg',quality:0.92}, html2canvas:{scale:2,useCORS:true,windowWidth:718,width:718}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:[]} }));   // iframe masīvi
+    // lapas dala pdfPaginate html2canvas kopijā (tā izkārtojums atšķiras no oriģināla)
+    opt.html2canvas.onclone=cd=>{ const root=cd.querySelector('.html2pdf__container')||cd.body; pdfPaginate(cd, root.firstElementChild||root); };
     const uri=await win.html2pdf().set(opt)
       .from(doc.body).outputPdf('datauristring');
     return uri.split(',')[1];
