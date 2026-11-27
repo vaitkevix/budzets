@@ -1311,6 +1311,7 @@ function moreSheet(){
   it.push(`<button onclick="closeSheet();exp('xlsx')">${IC.xls} Lejupielādēt Excel<span>›</span></button>`);
   it.push(`<button onclick="mailSheet()">${IC.send} Nosūtīt PDF e-pastā<span>›</span></button>`);
   if(S.id) it.push(`<button onclick="versions()">${IC.hist} Versiju vēsture<span>›</span></button>`);
+  if(S.id && !S.histVer && m.statuss==='Apstiprināts') it.push(`<button onclick="factSheet()">${IC.check} Tāme pret faktu · klienta akcepts<span>›</span></button>`);
   if(isMaker()) it.push(`<button onclick="tplSaveSheet()">${IC.tpl} Saglabāt kā veidni<span>›</span></button>`);
   if(isMaker()) it.push(`<button onclick="closeSheet();copyBudget()">${IC.copy} Izveidot kopiju<span>›</span></button>`);
   if(S.id && isMgmt() && !S.histVer && m.statuss!=='Melnraksts'){
@@ -1413,6 +1414,7 @@ const PANES={
       ${fld('Nosaukums',inp(o+'nosaukums',{ph:'piem. Hipokrāta 24A (53 dzīvokļi)'}))}
       ${fld('Adrese',inp(o+'adrese',{ph:'Hipokrāta iela 24A, Rīga',list:'objList'}),'Izvēlieties no objektiem vai ierakstiet jaunu adresi · <a href="#" onclick="mlLoad(S.d.objekts.adrese);return false">Ielikt datus no Mājas lietas</a>')}
       <div class="g2">${fld('Pasūtītājs',inp(o+'pasutitajs',{ph:'piem. Merko mājas'}))}${fld('Izpildītājs',inp(o+'izpilditajs'))}</div><div class="gap"></div>
+      <div class="g2">${fld('Derīgs līdz <span class="opt">· atgādinās 14 un 3 d. pirms</span>',inp(o+'derigs',{type:'date'}))}<div></div></div><div class="gap"></div>
       <div class="g3">${fld('Sagatavots',inp(o+'sagatavots',{type:'date'}))}${fld('Dzīvokļu skaits',inp(o+'dzivokli',{t:'n'}))}${fld('Dzīvokļu m²',inp(o+'lietderiga',{t:'n'}),'bez balkoniem; no tās rēķina € / m²')}</div><div class="gap"></div>
       ${serField()}<div class="gap"></div>
       ${fld('Piezīmes <span class="opt">· nav obligāti</span>',`<textarea class="textarea" data-p="objekts.piezimes" oninput="onIn(this)">${esc(S.d.objekts.piezimes||'')}</textarea>`)}
@@ -1753,6 +1755,25 @@ async function versions(){
         ${x.irDati?`<button class="link-btn" onclick="closeSheet();openBudget('${esc(S.id)}',${x.versija})">Atvērt v${x.versija}</button>`:''}</div></div>`).join('')||'<p class="lead">Nav ierakstu.</p>'}
       <div class="gap"></div><button class="btn btn-glass btn-block" onclick="closeSheet()">Aizvērt</button>`);
   }catch(err){ toast(netMsg(err),'err'); }
+}
+/* Tāme pret faktu (rēķini klientam) un klienta akcepts caur saiti */
+async function factSheet(){
+  openSheet(`<h3>Tāme pret faktu</h3><div class="skel"></div>`);
+  let r; try{ r=await api('fact',{id:S.id}); }catch(err){ closeSheet(); return toast(netMsg(err),'err'); }
+  const M=r.months||[], ym=(x)=>x.slice(5)+'.'+x.slice(0,4);
+  const rows=M.map(x=>`<tr><td>${ym(x.ym)}</td><td>${eur(r.plans)}</td><td>${eur(x.fakts)}</td><td>${x.pct==null?'—':nfmt(x.pct,1)+'%'}</td></tr>`).join('');
+  const ak=r.akc;
+  openSheet(`<h3>Tāme pret faktu</h3><p class="lead">${r.client?`Klients: <b>${esc(r.client.name)}</b> (${esc(r.client.how)}). Fakts = izrakstītie rēķini (bez PVN) par visu klientu.`:'Klients nav atrasts — pasūtītāja nosaukumam jāsakrīt ar klientu administrēšanā, vai objektam jābūt piesaistītam klientam.'}</p>
+    ${M.length?`<div class="rwrap"><table class="rtable"><tr><th>Mēnesis</th><th>Plāns</th><th>Fakts</th><th>%</th></tr>${rows}</table></div>`:(r.client?'<p class="hint">Rēķinu vēl nav.</p>':'')}
+    <div class="gap"></div><h3 style="font-size:17px">Klienta akcepts</h3>
+    <p class="lead">${ak&&ak.vards?`✓ Apstiprināja <b>${esc(ak.vards)}</b> · ${esc(String(ak.laiks).replace('T',' ').slice(0,16))} (v${ak.versija})`:ak?'Saite izveidota, klients vēl nav apstiprinājis.':'Izveidojiet saiti un nosūtiet klientam — viņš redzēs tāmi un varēs nospiest «Apstiprinu».'}</p>
+    ${isMaker()||isMgmt()?`<div class="btn-row"><button class="btn btn-primary" id="akGo">${ak?'Kopēt saiti':'Izveidot saiti'}</button>${ak?'<button class="btn btn-glass" id="akNew">Jauna saite</button>':''}</div><input class="input" id="akL" readonly style="margin-top:10px" hidden>`:''}
+    <div class="gap"></div><button class="btn btn-glass btn-block" onclick="closeSheet()">Aizvērt</button>`);
+  const mk=async(jauna)=>{ const c=calc(S.d), co=Object.assign({},c); delete co.rowCalc;
+    try{ const x=await api('acceptLink',{id:S.id,jauna:!!jauna,calc:co,meta:{versija:S.meta.versija,autors:S.meta.autors,statuss:S.meta.statuss}}); $('akL').hidden=false; $('akL').value=x.link; $('akL').select();
+      try{ await navigator.clipboard.writeText(x.link); toast('Saite nokopēta','ok'); }catch(e){ toast('Saite gatava — nokopējiet','ok'); } }catch(err){ toast(netMsg(err),'err'); } };
+  if($('akGo')) $('akGo').onclick=()=>mk(false);
+  if($('akNew')) $('akNew').onclick=()=>{ if(confirm('Izveidot jaunu saiti? Vecā vairs nestrādās.')) mk(true); };
 }
 async function exp(kind){
   const c=calc(S.d), co=Object.assign({},c); delete co.rowCalc;
